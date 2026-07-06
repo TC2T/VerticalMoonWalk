@@ -611,6 +611,7 @@ function update(delta) {
     player.x = canvas.width + 8;
   } else if (player.x > canvas.width + 8) {
     player.x = -player.width - 8;
+  }
 
   const prevY = player.y;
   player.vy += gravity * delta;
