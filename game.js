@@ -897,13 +897,14 @@ function drawEnemies() {
       continue;
     }
 
-    const palette = {
-      crawler: { body: "#3d8f3d", accent: "#8eff6f" },
-      limper: { body: "#5b8f4a", accent: "#d4ff88" },
-      shambler: { body: "#4f7c3d", accent: "#9ee8b2" },
-      runner: { body: "#60a24d", accent: "#d0ff74" },
-      jumper: { body: "#3c7c42", accent: "#a3ffa0" },
-    }[enemy.variant];
+    const paletteByVariant = {
+      dancing: { body: "#3d8f3d", accent: "#8eff6f" },
+      climbing: { body: "#5b8f4a", accent: "#d4ff88" },
+      "dancing-elite": { body: "#4f7c3d", accent: "#9ee8b2" },
+      "climbing-elite": { body: "#60a24d", accent: "#d0ff74" },
+      "dancing-fast": { body: "#3c7c42", accent: "#a3ffa0" },
+    };
+    const palette = paletteByVariant[enemy.variant] || { body: "#3d8f3d", accent: "#8eff6f" };
 
     ctx.save();
     ctx.shadowBlur = 18;
