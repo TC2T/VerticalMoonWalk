@@ -2,13 +2,15 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const restartButton = document.getElementById("restartButton");
 const pauseButton = document.getElementById("pauseButton");
-const playButton = document.getElementById("playButton");
+const pauseButtonImg = pauseButton?.querySelector("img");
 const soundButton = document.getElementById("soundButton");
 const soundSettingsPanel = document.getElementById("soundSettingsPanel");
+const pauseQuickAudio = document.getElementById("pauseQuickAudio");
 const closeSoundSettingsButton = document.getElementById("closeSoundSettings");
 const effectsToggle = document.getElementById("effectsToggle");
 const musicToggle = document.getElementById("musicToggle");
 const ambianceSelect = document.getElementById("ambianceSelect");
+const pauseAmbianceSelect = document.getElementById("pauseAmbianceSelect");
 const backgroundVideo = document.getElementById("gameBackground");
 const swipeArea = document.getElementById("swipeArea");
 
@@ -24,6 +26,8 @@ let cameraY = 0;
 let nextPlatformY = canvas.height - 120;
 let currentHeight = 0;
 let bestHeight = 0;
+let elapsedTime = 0;
+let bestTime = 0;
 let audioContext = null;
 let audioStarted = false;
 let lastDirection = 1; // 1 = right, -1 = left
@@ -88,8 +92,10 @@ zombieSprites.climbing.droite.src = "./Custom/Visuels/Climbing-zombie-droite.png
 
 try {
   bestHeight = Number(localStorage.getItem("verticalMoonWalkBestHeight")) || 0;
+  bestTime = Number(localStorage.getItem("verticalMoonWalkBestTime")) || 0;
 } catch (error) {
   bestHeight = 0;
+  bestTime = 0;
 }
 
 const player = {
@@ -265,11 +271,46 @@ function updatePauseButtonLabel() {
   const label = paused ? "Jouer" : "Pause";
   pauseButton.setAttribute("aria-label", label);
   pauseButton.setAttribute("title", label);
+  if (pauseButtonImg) {
+    pauseButtonImg.src = paused ? "./Custom/Visuels/Button-Play.png" : "./Custom/Visuels/Button-Pause.png";
+    pauseButtonImg.alt = label;
+  }
+}
+
+function updatePauseQuickAudioVisibility() {
+  if (!pauseQuickAudio) return;
+  pauseQuickAudio.hidden = !(paused && !gameOver);
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+function commitBestTime() {
+  if (elapsedTime <= bestTime) return;
+  bestTime = elapsedTime;
+  try {
+    localStorage.setItem("verticalMoonWalkBestTime", String(bestTime));
+  } catch (error) {
+    // ignore storage errors
+  }
+}
+
+function setAmbiance(ambiance) {
+  soundSettings.ambiance = ambiance;
+  updateSoundUI();
+  if (soundSettings.music) {
+    startAmbientSound();
+  }
 }
 
 function togglePause() {
   paused = !paused;
   updatePauseButtonLabel();
+  updatePauseQuickAudioVisibility();
   if (!paused) {
     lastTime = performance.now();
   }
@@ -382,6 +423,7 @@ function updateSoundUI() {
   if (effectsToggle) effectsToggle.checked = soundSettings.effects;
   if (musicToggle) musicToggle.checked = soundSettings.music;
   if (ambianceSelect) ambianceSelect.value = soundSettings.ambiance;
+  if (pauseAmbianceSelect) pauseAmbianceSelect.value = soundSettings.ambiance;
 }
 
 function openSoundSettings() {
@@ -460,12 +502,14 @@ function resetGame() {
   gameOver = false;
   paused = false;
   updatePauseButtonLabel();
+  updatePauseQuickAudioVisibility();
   screenFlash = 0;
   particles.length = 0;
   lastTime = 0;
   cameraY = 0;
   nextPlatformY = canvas.height - 120;
   currentHeight = 0;
+  elapsedTime = 0;
   player.vx = 0;
   player.vy = 0;
   player.invincibleTimer = 0;
@@ -612,6 +656,8 @@ function update(delta) {
 
   if (paused) return;
 
+  elapsedTime += delta;
+
   screenFlash = Math.max(0, screenFlash - delta);
   player.invincibleTimer = Math.max(0, player.invincibleTimer - delta);
   player.slowTimer = Math.max(0, player.slowTimer - delta);
@@ -733,6 +779,8 @@ function update(delta) {
         player.vy = -jumpStrength * 0.85;
       } else if (player.invincibleTimer <= 0) {
         gameOver = true;
+        updatePauseQuickAudioVisibility();
+        commitBestTime();
         playGameOverSound();
       }
     } else {
@@ -756,6 +804,8 @@ function update(delta) {
 
   if (player.y - cameraY > canvas.height + 80) {
     gameOver = true;
+    updatePauseQuickAudioVisibility();
+    commitBestTime();
     playGameOverSound();
   }
 
@@ -999,7 +1049,17 @@ function drawScore() {
   ctx.font = "14px sans-serif";
   ctx.fillStyle = "rgba(255,255,255,0.75)";
   ctx.fillText(`Meilleur : ${bestHeight}`, canvas.width / 2, 56);
+
+  ctx.textAlign = "right";
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.font = "bold 24px sans-serif";
+  ctx.fillText(`Temps : ${formatDuration(elapsedTime)}`, canvas.width - 16, 34);
+  ctx.font = "14px sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.fillText(`Meilleur : ${formatDuration(bestTime)}`, canvas.width - 16, 56);
+
   if (messageTimer > 0 && messageText) {
+    ctx.textAlign = "center";
     ctx.font = "bold 16px sans-serif";
     ctx.fillStyle = "#ffe082";
     ctx.fillText(messageText, canvas.width / 2, 82);
@@ -1026,9 +1086,7 @@ function drawOverlay() {
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 28px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("Pause", canvas.width / 2, canvas.height / 2 - 8);
-  ctx.font = "16px sans-serif";
-  ctx.fillText("Appuie sur Pause pour reprendre", canvas.width / 2, canvas.height / 2 + 22);
+  ctx.fillText("Pause", canvas.width / 2, canvas.height / 2 - 72);
 }
 
 function loop(timestamp) {
@@ -1076,17 +1134,11 @@ restartButton.addEventListener("click", () => {
 });
 pauseButton.addEventListener("click", () => {
   ensureAudio();
-  togglePause();
-});
-playButton?.addEventListener("click", () => {
-  ensureAudio();
   if (gameOver) {
     resetGame();
     return;
   }
-  if (paused) {
-    togglePause();
-  }
+  togglePause();
 });
 soundButton?.addEventListener("click", (event) => {
   event.preventDefault();
@@ -1107,10 +1159,10 @@ musicToggle?.addEventListener("change", (event) => {
   applyAudioSettingChange();
 });
 ambianceSelect?.addEventListener("change", (event) => {
-  soundSettings.ambiance = event.target.value;
-  if (soundSettings.music) {
-    startAmbientSound();
-  }
+  setAmbiance(event.target.value);
+});
+pauseAmbianceSelect?.addEventListener("change", (event) => {
+  setAmbiance(event.target.value);
 });
 
 // Swipe / drag to move on the bottom 50% of the canvas
