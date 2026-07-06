@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VerticalMoonWalk</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="hud">
+      <h1>VerticalMoonWalk</h1>
+      <p>Saute sur les plateformes, monte aussi haut que possible et évite la chute.</p>
+      <div class="hud-actions">
+        <button id="restartButton">Recommencer</button>
+        <button id="pauseButton" type="button">Pause</button>
+      </div>
+    </div>
+    <video id="gameBackground" autoplay muted loop playsinline preload="auto">
+      <source src="./Custom/Visuels/Fond.mp4" type="video/mp4" />
+    </video>
+    <div class="game-shell">
+      <canvas id="game" width="480" height="720"></canvas>
+      <div class="mobile-controls" aria-label="Contrôles tactiles">
+        <button class="control-btn left" type="button" data-control="left" aria-label="Aller à gauche">◀</button>
+        <button class="control-btn right" type="button" data-control="right" aria-label="Aller à droite">▶</button>
+      </div>
+    </div>
+    <script src="game.js"></script>
+  </body>
+</html>
