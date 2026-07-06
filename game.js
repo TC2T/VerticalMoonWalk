@@ -3,7 +3,11 @@ const ctx = canvas.getContext("2d");
 const restartButton = document.getElementById("restartButton");
 const pauseButton = document.getElementById("pauseButton");
 const backgroundVideo = document.getElementById("gameBackground");
-const controlButtons = Array.from(document.querySelectorAll(".control-btn"));
+const swipeArea = document.getElementById("swipeArea");
+
+let isDragging = false;
+let dragStartX = 0;
+let playerStartX = 0;
 
 const keys = { left: false, right: false };
 let gameOver = false;
@@ -916,7 +920,45 @@ pauseButton.addEventListener("click", () => {
   togglePause();
 });
 
-bindMobileControls();
+// Swipe / drag to move on the bottom 50% of the canvas
+if (swipeArea) {
+  swipeArea.addEventListener(
+    "pointerdown",
+    (e) => {
+      ensureAudio();
+      const rect = canvas.getBoundingClientRect();
+      const relativeY = e.clientY - rect.top;
+      if (relativeY < rect.height * 0.5) return; // only start when touching bottom 50%
+      isDragging = true;
+      dragStartX = e.clientX;
+      playerStartX = player.x;
+      try {
+        swipeArea.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    },
+    { passive: false }
+  );
+
+  swipeArea.addEventListener("pointermove", (e) => {
+    if (!isDragging) return;
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    const dx = (e.clientX - dragStartX) * scale;
+    player.x = Math.max(-player.width, Math.min(canvas.width, playerStartX + dx));
+  });
+
+  const endDrag = (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    try {
+      swipeArea.releasePointerCapture && swipeArea.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+  };
+
+  swipeArea.addEventListener("pointerup", endDrag);
+  swipeArea.addEventListener("pointercancel", endDrag);
+}
+
 resizeCanvas();
 backgroundVideo?.play().catch(() => {});
 resetGame();

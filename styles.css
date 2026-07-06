@@ -117,6 +117,46 @@ canvas {
   pointer-events: none;
 }
 
+.in-game-buttons {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.circle-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  display: inline-grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ffde59, #ff8c42);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35), 0 0 28px rgba(255,79,216,0.08);
+  cursor: pointer;
+}
+
+.circle-btn.pause {
+  background: linear-gradient(135deg,#7ef7ff,#3aa7ff);
+}
+
+.circle-btn svg { display:block }
+
+.swipe-area {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 50%;
+  z-index: 4;
+  touch-action: none;
+  background: transparent;
+}
+
 .control-btn {
   width: 54px;
   height: 54px;
@@ -147,7 +187,7 @@ canvas {
 
   .game-shell {
     width: min(100%, 480px);
-    max-height: calc(100vh - 220px);
+    max-height: calc(100vh - 120px);
   }
 
   .mobile-controls {
