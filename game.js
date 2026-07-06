@@ -18,6 +18,8 @@ let nextPlatformY = canvas.height - 120;
 let currentHeight = 0;
 let bestHeight = 0;
 let audioContext = null;
+let audioStarted = false;
+let lastDirection = 1; // 1 = right, -1 = left
 
 const iconicCries = ["Hee-hee !", "Aoow !", "Ow !", "Ch'ki-ta !", "Hoo !", "Aah !", "Yah !"];
 const zombieTypes = ["dancing", "climbing", "dancing-elite", "climbing-elite", "dancing-fast"];
@@ -77,6 +79,10 @@ let animationSoundPool = [];
 function setControlState(control, isPressed) {
   if (control === "left") keys.left = isPressed;
   if (control === "right") keys.right = isPressed;
+  if (isPressed) {
+    if (control === "left") lastDirection = -1;
+    if (control === "right") lastDirection = 1;
+  }
 }
 
 function bindMobileControls() {
@@ -108,7 +114,8 @@ function resizeCanvas() {
   const baseWidth = 480;
   const baseHeight = 720;
   const maxWidth = Math.min(window.innerWidth - 24, baseWidth);
-  const maxHeight = Math.min(window.innerHeight - 180, baseHeight);
+  const margin = window.innerWidth <= 600 ? 80 : 180;
+  const maxHeight = Math.min(window.innerHeight - margin, baseHeight);
   const scale = Math.min(maxWidth / baseWidth, maxHeight / baseHeight, 1);
   const width = Math.max(320, Math.round(baseWidth * scale));
   const height = Math.round(baseHeight * scale);
@@ -203,9 +210,15 @@ function drawFlash() {
   ctx.restore();
 }
 
+function updatePauseButtonLabel() {
+  const label = paused ? "Jouer" : "Pause";
+  pauseButton.setAttribute("aria-label", label);
+  pauseButton.setAttribute("title", label);
+}
+
 function togglePause() {
   paused = !paused;
-  pauseButton.textContent = paused ? "Jouer" : "Pause";
+  updatePauseButtonLabel();
   if (!paused) {
     lastTime = performance.now();
   }
@@ -261,6 +274,26 @@ function playAnimationSound() {
   }
 }
 
+function startAmbientSound() {
+  if (!ambientSound) return;
+  if (audioStarted && !ambientSound.paused && !ambientSound.ended) return;
+
+  try {
+    ambientSound.currentTime = 0;
+    ambientSound.play().then(() => {
+      audioStarted = true;
+    }).catch(() => {
+      window.setTimeout(() => {
+        if (ambientSound && (ambientSound.paused || ambientSound.ended)) {
+          ambientSound.play().catch(() => {});
+        }
+      }, 200);
+    });
+  } catch (error) {
+    // Ignore autoplay restrictions.
+  }
+}
+
 function ensureAudio() {
   if (!audioContext) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -269,10 +302,15 @@ function ensureAudio() {
   }
 
   if (audioContext.state === "suspended") {
-    audioContext.resume().catch(() => {});
+    audioContext.resume().then(() => {
+      startAmbientSound();
+    }).catch(() => {});
   }
 
-  if (jumpSound) return;
+  if (jumpSound) {
+    startAmbientSound();
+    return;
+  }
 
   const createSound = (src) => {
     const audio = new Audio(src);
@@ -299,11 +337,7 @@ function ensureAudio() {
     sound.volume = 0.85;
   });
 
-  try {
-    ambientSound.play().catch(() => {});
-  } catch (error) {
-    // Ignore autoplay restrictions.
-  }
+  startAmbientSound();
 }
 
 function playIconicCry() {
@@ -313,7 +347,7 @@ function playIconicCry() {
 function resetGame() {
   gameOver = false;
   paused = false;
-  pauseButton.textContent = "Pause";
+  updatePauseButtonLabel();
   screenFlash = 0;
   particles.length = 0;
   lastTime = 0;
@@ -495,6 +529,12 @@ function update(delta) {
     player.vy -= 220 * delta;
   }
   player.y += player.vy * delta;
+
+  // Update facing direction from velocity when not dragging
+  if (!isDragging) {
+    if (player.vx < -8) lastDirection = -1;
+    else if (player.vx > 8) lastDirection = 1;
+  }
 
   for (const platform of platforms) {
     const playerBottom = player.y + player.height;
@@ -799,7 +839,12 @@ function drawPlayer() {
     ctx.save();
     ctx.shadowBlur = 24;
     ctx.shadowColor = player.invincibleTimer > 0 ? "#8af6ff" : "#ff4bd8";
-    ctx.drawImage(sprite, player.x - 8, screenY - 8, player.width + 16, player.height + 16);
+    if (lastDirection >= 0) {
+      ctx.drawImage(sprite, player.x - 8, screenY - 8, player.width + 16, player.height + 16);
+    } else {
+      // draw flipped horizontally
+      ctx.drawImage(sprite, player.x + player.width + 8, screenY - 8, -(player.width + 16), player.height + 16);
+    }
     ctx.restore();
     return;
   }
@@ -897,6 +942,8 @@ window.addEventListener("keydown", (event) => {
   ensureAudio();
   if (event.key === "ArrowLeft" || event.key === "a" || event.key === "A") keys.left = true;
   if (event.key === "ArrowRight" || event.key === "d" || event.key === "D") keys.right = true;
+  if (event.key === "ArrowLeft" || event.key === "a" || event.key === "A") lastDirection = -1;
+  if (event.key === "ArrowRight" || event.key === "d" || event.key === "D") lastDirection = 1;
   if (event.key === "p" || event.key === "P") {
     event.preventDefault();
     togglePause();
@@ -910,6 +957,7 @@ window.addEventListener("keyup", (event) => {
 
 canvas.addEventListener("pointerdown", ensureAudio);
 window.addEventListener("pointerdown", ensureAudio, { once: true });
+window.addEventListener("touchstart", ensureAudio, { once: true, passive: true });
 window.addEventListener("keydown", ensureAudio, { once: true });
 restartButton.addEventListener("click", () => {
   ensureAudio();

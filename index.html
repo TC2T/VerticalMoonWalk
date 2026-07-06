@@ -7,10 +7,7 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="hud">
-      <h1>VerticalMoonWalk</h1>
-      <p>Saute sur les plateformes, monte aussi haut que possible et évite la chute.</p>
-    </div>
+    <!-- tutorial banner removed per user request -->
     <video id="gameBackground" autoplay muted loop playsinline preload="auto">
       <source src="./Custom/Visuels/Fond.mp4" type="video/mp4" />
     </video>
@@ -18,14 +15,13 @@
       <canvas id="game" width="480" height="720"></canvas>
 
       <div class="in-game-buttons" aria-hidden="false">
-        <button id="restartButton" class="circle-btn restart" title="Recommencer" aria-label="Recommencer">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M21 12a9 9 0 10-2.87 6.18L21 12z" stroke="#07111d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M21 3v6h-6" stroke="#07111d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
+          <button id="restartButton" class="circle-btn restart" title="Recommencer" aria-label="Recommencer">
+            <img src="./Custom/Visuels/Button-Restart.png" alt="Recommencer" />
+          </button>
 
-        <button id="pauseButton" class="circle-btn pause" type="button" title="Pause" aria-label="Pause">⏸</button>
+          <button id="pauseButton" class="circle-btn pause" type="button" title="Pause" aria-label="Pause">
+            <img src="./Custom/Visuels/Button-Pause.png" alt="Pause" />
+          </button>
       </div>
 
       <div id="swipeArea" class="swipe-area" aria-hidden="false"></div>
