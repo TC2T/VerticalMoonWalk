@@ -162,6 +162,10 @@ canvas {
   z-index: 20;
 }
 
+.sound-settings-panel[hidden] {
+  display: none;
+}
+
 .sound-settings-card {
   width: min(92vw, 360px);
   background: rgba(8, 12, 24, 0.96);
