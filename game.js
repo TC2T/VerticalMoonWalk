@@ -1045,18 +1045,18 @@ function drawScore() {
   ctx.textAlign = "center";
   ctx.fillStyle = "rgba(255,255,255,0.96)";
   ctx.font = "bold 24px sans-serif";
-  ctx.fillText(`Hauteur : ${currentHeight}`, canvas.width / 2, 34);
+  ctx.fillText(`${currentHeight}`, canvas.width / 2, 34);
   ctx.font = "14px sans-serif";
   ctx.fillStyle = "rgba(255,255,255,0.75)";
-  ctx.fillText(`Meilleur : ${bestHeight}`, canvas.width / 2, 56);
+  ctx.fillText(`${bestHeight}`, canvas.width / 2, 56);
 
   ctx.textAlign = "right";
   ctx.fillStyle = "rgba(255,255,255,0.96)";
   ctx.font = "bold 24px sans-serif";
-  ctx.fillText(`Temps : ${formatDuration(elapsedTime)}`, canvas.width - 16, 34);
+  ctx.fillText(`${formatDuration(elapsedTime)}`, canvas.width - 16, 34);
   ctx.font = "14px sans-serif";
   ctx.fillStyle = "rgba(255,255,255,0.75)";
-  ctx.fillText(`Meilleur : ${formatDuration(bestTime)}`, canvas.width - 16, 56);
+  ctx.fillText(`${formatDuration(bestTime)}`, canvas.width - 16, 56);
 
   if (messageTimer > 0 && messageText) {
     ctx.textAlign = "center";
