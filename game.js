@@ -270,30 +270,36 @@ function ensureAudio() {
 
   if (jumpSound) return;
 
-  jumpSound = new Audio("./Custom/Sons/MJ-Jump.mp3");
-  gameOverSound = new Audio("./Custom/Sons/MJ-Fall.mp3");
-  ambientSound = new Audio("./Custom/Sons/AMBIENT-THRILLER.mp3");
+  const createSound = (src) => {
+    const audio = new Audio(src);
+    audio.preload = "auto";
+    audio.load();
+    return audio;
+  };
+
+  jumpSound = createSound("./Custom/Sons/MJ-Jump.mp3");
+  gameOverSound = createSound("./Custom/Sons/MJ-Fall.mp3");
+  ambientSound = createSound("./Custom/Sons/ambient-thriller_v2.mp3");
   ambientSound.loop = true;
-  ambientSound.volume = 0.45;
+  ambientSound.volume = 0.35;
   animationSoundPool = [
-    new Audio("./Custom/Sons/MJ-Aww.mp3"),
-    new Audio("./Custom/Sons/MJ-Aww2.mp3"),
-    new Audio("./Custom/Sons/MJ-Aww3.mp3"),
-    new Audio("./Custom/Sons/MJ-HeeHee.mp3"),
-    new Audio("./Custom/Sons/MJ-Hoo.mp3"),
-    new Audio("./Custom/Sons/MJ-Hoo2.mp3"),
-    new Audio("./Custom/Sons/MJ-HooHoo.mp3"),
+    createSound("./Custom/Sons/MJ-Aww.mp3"),
+    createSound("./Custom/Sons/MJ-Aww2.mp3"),
+    createSound("./Custom/Sons/MJ-Aww3.mp3"),
+    createSound("./Custom/Sons/MJ-HeeHee.mp3"),
+    createSound("./Custom/Sons/MJ-Hoo.mp3"),
+    createSound("./Custom/Sons/MJ-Hoo2.mp3"),
+    createSound("./Custom/Sons/MJ-HooHoo.mp3"),
   ];
   animationSoundPool.forEach((sound) => {
-    sound.preload = "auto";
-    sound.volume = 0.9;
+    sound.volume = 0.85;
   });
-  jumpSound.preload = "auto";
-  gameOverSound.preload = "auto";
-  jumpSound.load();
-  gameOverSound.load();
-  ambientSound.load();
-  ambientSound.play().catch(() => {});
+
+  try {
+    ambientSound.play().catch(() => {});
+  } catch (error) {
+    // Ignore autoplay restrictions.
+  }
 }
 
 function playIconicCry() {
@@ -899,6 +905,8 @@ window.addEventListener("keyup", (event) => {
 });
 
 canvas.addEventListener("pointerdown", ensureAudio);
+window.addEventListener("pointerdown", ensureAudio, { once: true });
+window.addEventListener("keydown", ensureAudio, { once: true });
 restartButton.addEventListener("click", () => {
   ensureAudio();
   resetGame();
