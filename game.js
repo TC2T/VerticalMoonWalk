@@ -2,6 +2,12 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const restartButton = document.getElementById("restartButton");
 const pauseButton = document.getElementById("pauseButton");
+const soundButton = document.getElementById("soundButton");
+const soundSettingsPanel = document.getElementById("soundSettingsPanel");
+const closeSoundSettingsButton = document.getElementById("closeSoundSettings");
+const effectsToggle = document.getElementById("effectsToggle");
+const musicToggle = document.getElementById("musicToggle");
+const ambianceSelect = document.getElementById("ambianceSelect");
 const backgroundVideo = document.getElementById("gameBackground");
 const swipeArea = document.getElementById("swipeArea");
 
@@ -20,6 +26,13 @@ let bestHeight = 0;
 let audioContext = null;
 let audioStarted = false;
 let lastDirection = 1; // 1 = right, -1 = left
+let playerSpriteContactMirror = null;
+let playerSpriteJumpMirror = null;
+const soundSettings = {
+  effects: true,
+  music: true,
+  ambiance: "thriller",
+};
 
 const iconicCries = ["Hee-hee !", "Aoow !", "Ow !", "Ch'ki-ta !", "Hoo !", "Aah !", "Yah !"];
 const zombieTypes = ["dancing", "climbing", "dancing-elite", "climbing-elite", "dancing-fast"];
@@ -28,6 +41,34 @@ const playerSpriteContact = new Image();
 playerSpriteContact.src = "./Custom/Visuels/Player-1.png";
 const playerSpriteJump = new Image();
 playerSpriteJump.src = "./Custom/Visuels/Player-2.png";
+
+function createMirroredImage(source) {
+  const canvas = document.createElement("canvas");
+  const width = source.naturalWidth || source.width || 64;
+  const height = source.naturalHeight || source.height || 64;
+  canvas.width = width;
+  canvas.height = height;
+  const drawingContext = canvas.getContext("2d");
+  drawingContext.translate(width, 0);
+  drawingContext.scale(-1, 1);
+  drawingContext.drawImage(source, 0, 0, width, height);
+  const mirroredImage = new Image();
+  mirroredImage.src = canvas.toDataURL("image/png");
+  return mirroredImage;
+}
+
+function ensureMirroredSprites() {
+  if (!playerSpriteContactMirror && playerSpriteContact.complete) {
+    playerSpriteContactMirror = createMirroredImage(playerSpriteContact);
+  }
+  if (!playerSpriteJumpMirror && playerSpriteJump.complete) {
+    playerSpriteJumpMirror = createMirroredImage(playerSpriteJump);
+  }
+}
+
+playerSpriteContact.addEventListener("load", ensureMirroredSprites);
+playerSpriteJump.addEventListener("load", ensureMirroredSprites);
+ensureMirroredSprites();
 
 const zombieSprites = {
   dancing: {
@@ -224,7 +265,17 @@ function togglePause() {
   }
 }
 
+function stopAllEffectSounds() {
+  [jumpSound, gameOverSound, ...animationSoundPool].forEach((sound) => {
+    if (sound && sound.currentSrc) {
+      sound.pause();
+      sound.currentTime = 0;
+    }
+  });
+}
+
 function playJumpSound() {
+  if (!soundSettings.effects) return;
   if (jumpSound && jumpSound.currentSrc) {
     jumpSound.currentTime = 0;
     jumpSound.play().catch(() => {});
@@ -245,6 +296,7 @@ function playJumpSound() {
 }
 
 function playGameOverSound() {
+  if (!soundSettings.effects) return;
   if (gameOverSound && gameOverSound.currentSrc) {
     gameOverSound.currentTime = 0;
     gameOverSound.play().catch(() => {});
@@ -266,6 +318,7 @@ function playGameOverSound() {
 }
 
 function playAnimationSound() {
+  if (!soundSettings.effects) return;
   if (animationSoundPool.length === 0) return;
   const sound = animationSoundPool[Math.floor(Math.random() * animationSoundPool.length)];
   if (sound && sound.currentSrc) {
@@ -275,6 +328,12 @@ function playAnimationSound() {
 }
 
 function startAmbientSound() {
+  if (!soundSettings.music) {
+    if (ambientSound) {
+      ambientSound.pause();
+    }
+    return;
+  }
   if (!ambientSound) return;
   if (audioStarted && !ambientSound.paused && !ambientSound.ended) return;
 
@@ -291,6 +350,26 @@ function startAmbientSound() {
     });
   } catch (error) {
     // Ignore autoplay restrictions.
+  }
+}
+
+function updateSoundUI() {
+  if (effectsToggle) effectsToggle.checked = soundSettings.effects;
+  if (musicToggle) musicToggle.checked = soundSettings.music;
+  if (ambianceSelect) ambianceSelect.value = soundSettings.ambiance;
+}
+
+function openSoundSettings() {
+  ensureAudio();
+  updateSoundUI();
+  if (soundSettingsPanel) {
+    soundSettingsPanel.hidden = false;
+  }
+}
+
+function closeSoundSettings() {
+  if (soundSettingsPanel) {
+    soundSettingsPanel.hidden = true;
   }
 }
 
@@ -342,6 +421,17 @@ function ensureAudio() {
 
 function playIconicCry() {
   playAnimationSound();
+}
+
+function applyAudioSettingChange() {
+  if (!soundSettings.music) {
+    if (ambientSound) ambientSound.pause();
+  } else {
+    startAmbientSound();
+  }
+  if (!soundSettings.effects) {
+    stopAllEffectSounds();
+  }
 }
 
 function resetGame() {
@@ -517,11 +607,10 @@ function update(delta) {
   if (keys.right) player.vx += moveSpeed;
 
   player.x += player.vx * delta;
-  if (player.x + player.width < 0) {
-    player.x = canvas.width;
-  } else if (player.x > canvas.width) {
-    player.x = -player.width;
-  }
+  if (player.x + player.width < -8) {
+    player.x = canvas.width + 8;
+  } else if (player.x > canvas.width + 8) {
+    player.x = -player.width - 8;
 
   const prevY = player.y;
   player.vy += gravity * delta;
@@ -834,17 +923,14 @@ function drawEnemies() {
 
 function drawPlayer() {
   const screenY = player.y - cameraY;
-  const sprite = player.vy < 0 ? playerSpriteJump : playerSpriteContact;
+  const sprite = player.vy < 0
+    ? (lastDirection < 0 ? playerSpriteJumpMirror || playerSpriteJump : playerSpriteJump)
+    : (lastDirection < 0 ? playerSpriteContactMirror || playerSpriteContact : playerSpriteContact);
   if (sprite && sprite.complete) {
     ctx.save();
     ctx.shadowBlur = 24;
     ctx.shadowColor = player.invincibleTimer > 0 ? "#8af6ff" : "#ff4bd8";
-    if (lastDirection >= 0) {
-      ctx.drawImage(sprite, player.x - 8, screenY - 8, player.width + 16, player.height + 16);
-    } else {
-      // draw flipped horizontally
-      ctx.drawImage(sprite, player.x + player.width + 8, screenY - 8, -(player.width + 16), player.height + 16);
-    }
+    ctx.drawImage(sprite, player.x - 8, screenY - 8, player.width + 16, player.height + 16);
     ctx.restore();
     return;
   }
@@ -967,6 +1053,30 @@ pauseButton.addEventListener("click", () => {
   ensureAudio();
   togglePause();
 });
+soundButton?.addEventListener("click", (event) => {
+  event.preventDefault();
+  openSoundSettings();
+});
+closeSoundSettingsButton?.addEventListener("click", closeSoundSettings);
+soundSettingsPanel?.addEventListener("click", (event) => {
+  if (event.target === soundSettingsPanel) {
+    closeSoundSettings();
+  }
+});
+effectsToggle?.addEventListener("change", (event) => {
+  soundSettings.effects = event.target.checked;
+  applyAudioSettingChange();
+});
+musicToggle?.addEventListener("change", (event) => {
+  soundSettings.music = event.target.checked;
+  applyAudioSettingChange();
+});
+ambianceSelect?.addEventListener("change", (event) => {
+  soundSettings.ambiance = event.target.value;
+  if (soundSettings.music) {
+    startAmbientSound();
+  }
+});
 
 // Swipe / drag to move on the bottom 50% of the canvas
 if (swipeArea) {
@@ -992,7 +1102,9 @@ if (swipeArea) {
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
     const dx = (e.clientX - dragStartX) * scale;
-    player.x = Math.max(-player.width, Math.min(canvas.width, playerStartX + dx));
+    player.x = playerStartX + dx;
+    if (dx < -8) lastDirection = -1;
+    else if (dx > 8) lastDirection = 1;
   });
 
   const endDrag = (e) => {

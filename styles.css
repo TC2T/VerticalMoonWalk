@@ -151,6 +151,75 @@ canvas {
   object-fit: contain;
 }
 
+.sound-settings-panel {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 4, 9, 0.72);
+  backdrop-filter: blur(8px);
+  z-index: 20;
+}
+
+.sound-settings-card {
+  width: min(92vw, 360px);
+  background: rgba(8, 12, 24, 0.96);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 18px 60px rgba(0,0,0,0.45);
+}
+
+.sound-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.sound-settings-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.12);
+  color: white;
+  cursor: pointer;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.96rem;
+}
+
+.setting-row:first-of-type {
+  border-top: none;
+}
+
+.setting-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #7ef7ff;
+}
+
+.setting-row select {
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.08);
+  color: white;
+}
+
 .swipe-area {
   position: absolute;
   left: 0;
@@ -214,6 +283,10 @@ canvas {
 
   .circle-btn img {
     width: min(92px, 24vw);
+  }
+
+  .sound-settings-card {
+    width: min(94vw, 360px);
   }
 
   .mobile-controls {

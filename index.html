@@ -25,6 +25,36 @@
           <button id="pauseButton" class="circle-btn pause" type="button" title="Pause" aria-label="Pause">
             <img src="./Custom/Visuels/Button-Pause.png" alt="Pause" />
           </button>
+
+          <button id="soundButton" class="circle-btn sound" type="button" title="Son" aria-label="Son">
+            <img src="./Custom/Visuels/button-sound.png" alt="Son" />
+          </button>
+      </div>
+
+      <div id="soundSettingsPanel" class="sound-settings-panel" hidden>
+        <div class="sound-settings-card" role="dialog" aria-modal="true" aria-labelledby="sound-settings-title">
+          <div class="sound-settings-header">
+            <h2 id="sound-settings-title">Paramètres audio</h2>
+            <button id="closeSoundSettings" class="icon-btn" type="button" aria-label="Fermer">×</button>
+          </div>
+
+          <label class="setting-row" for="effectsToggle">
+            <span>Effets</span>
+            <input id="effectsToggle" type="checkbox" checked />
+          </label>
+
+          <label class="setting-row" for="musicToggle">
+            <span>Musique</span>
+            <input id="musicToggle" type="checkbox" checked />
+          </label>
+
+          <label class="setting-row" for="ambianceSelect">
+            <span>Ambiance</span>
+            <select id="ambianceSelect">
+              <option value="thriller">Thriller</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div id="swipeArea" class="swipe-area" aria-hidden="false"></div>
