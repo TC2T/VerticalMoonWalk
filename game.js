@@ -2,6 +2,7 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const restartButton = document.getElementById("restartButton");
 const pauseButton = document.getElementById("pauseButton");
+const playButton = document.getElementById("playButton");
 const soundButton = document.getElementById("soundButton");
 const soundSettingsPanel = document.getElementById("soundSettingsPanel");
 const closeSoundSettingsButton = document.getElementById("closeSoundSettings");
@@ -115,7 +116,16 @@ let screenFlash = 0;
 let jumpSound = null;
 let gameOverSound = null;
 let ambientSound = null;
+let currentAmbiance = "";
 let animationSoundPool = [];
+
+const ambientTracks = {
+  thriller: "./Custom/Sons/AMBIENT-THRILLER.mp3",
+  beat_it: "./Custom/Sons/AMBIENT-BEAT_IT.mp3",
+  smooth_criminal: "./Custom/Sons/AMBIENT-SMOOTH_CRIMINAL.mp3",
+  remember_the_time: "./Custom/Sons/AMBIENT-REMEMBER_THE_TIME.mp3",
+  you_rock_my_world: "./Custom/Sons/AMBIENT-YOU_ROCK_MY_WORLD.mp3",
+};
 
 function setControlState(control, isPressed) {
   if (control === "left") keys.left = isPressed;
@@ -334,11 +344,26 @@ function startAmbientSound() {
     }
     return;
   }
+
+  const selectedTrack = ambientTracks[soundSettings.ambiance] || ambientTracks.thriller;
+  if (!ambientSound || currentAmbiance !== soundSettings.ambiance) {
+    if (ambientSound) {
+      ambientSound.pause();
+      ambientSound.currentTime = 0;
+    }
+    ambientSound = new Audio(selectedTrack);
+    ambientSound.preload = "auto";
+    ambientSound.loop = true;
+    ambientSound.volume = 0.35;
+    ambientSound.load();
+    currentAmbiance = soundSettings.ambiance;
+    audioStarted = false;
+  }
+
   if (!ambientSound) return;
   if (audioStarted && !ambientSound.paused && !ambientSound.ended) return;
 
   try {
-    ambientSound.currentTime = 0;
     ambientSound.play().then(() => {
       audioStarted = true;
     }).catch(() => {
@@ -400,9 +425,6 @@ function ensureAudio() {
 
   jumpSound = createSound("./Custom/Sons/MJ-Jump.mp3");
   gameOverSound = createSound("./Custom/Sons/MJ-Fall.mp3");
-  ambientSound = createSound("./Custom/Sons/ambient-thriller_v2.mp3");
-  ambientSound.loop = true;
-  ambientSound.volume = 0.35;
   animationSoundPool = [
     createSound("./Custom/Sons/MJ-Aww.mp3"),
     createSound("./Custom/Sons/MJ-Aww2.mp3"),
@@ -607,10 +629,11 @@ function update(delta) {
   if (keys.right) player.vx += moveSpeed;
 
   player.x += player.vx * delta;
-  if (player.x + player.width < -8) {
-    player.x = canvas.width + 8;
-  } else if (player.x > canvas.width + 8) {
-    player.x = -player.width - 8;
+  const playerCenterX = player.x + player.width / 2;
+  if (playerCenterX < 0) {
+    player.x = canvas.width - player.width / 2;
+  } else if (playerCenterX > canvas.width) {
+    player.x = -player.width / 2;
   }
 
   const prevY = player.y;
@@ -1054,6 +1077,16 @@ restartButton.addEventListener("click", () => {
 pauseButton.addEventListener("click", () => {
   ensureAudio();
   togglePause();
+});
+playButton?.addEventListener("click", () => {
+  ensureAudio();
+  if (gameOver) {
+    resetGame();
+    return;
+  }
+  if (paused) {
+    togglePause();
+  }
 });
 soundButton?.addEventListener("click", (event) => {
   event.preventDefault();

@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>VerticalMoonWalk</title>
-    <link rel="stylesheet" href="styles.css?v=20260706b" />
+    <link rel="stylesheet" href="styles.css?v=20260707a" />
   </head>
   <body>
     <!-- tutorial banner removed per user request -->
@@ -24,6 +24,10 @@
 
           <button id="pauseButton" class="circle-btn pause" type="button" title="Pause" aria-label="Pause">
             <img src="./Custom/Visuels/Button-Pause.png" alt="Pause" />
+          </button>
+
+          <button id="playButton" class="circle-btn play" type="button" title="Jouer" aria-label="Jouer">
+            <img src="./Custom/Visuels/Button-Play.png" alt="Jouer" />
           </button>
 
           <button id="soundButton" class="circle-btn sound" type="button" title="Son" aria-label="Son">
@@ -52,6 +56,10 @@
             <span>Ambiance</span>
             <select id="ambianceSelect">
               <option value="thriller">Thriller</option>
+              <option value="beat_it">Beat It</option>
+              <option value="smooth_criminal">Smooth Criminal</option>
+              <option value="remember_the_time">Remember The Time</option>
+              <option value="you_rock_my_world">You Rock My World</option>
             </select>
           </label>
         </div>
@@ -59,6 +67,6 @@
 
       <div id="swipeArea" class="swipe-area" aria-hidden="false"></div>
     </div>
-    <script src="game.js?v=20260706b"></script>
+    <script src="game.js?v=20260707a"></script>
   </body>
 </html>

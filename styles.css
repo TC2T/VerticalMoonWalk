@@ -87,6 +87,11 @@ button {
   color: #031320;
 }
 
+#playButton {
+  background: transparent;
+  color: #031320;
+}
+
 .game-shell {
   position: relative;
   z-index: 2;
