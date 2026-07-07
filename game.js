@@ -33,10 +33,13 @@ let audioStarted = false;
 let lastDirection = 1; // 1 = right, -1 = left
 let playerSpriteContactMirror = null;
 let playerSpriteJumpMirror = null;
+const SAFE_PLATFORM_COUNT = 10;
+const TRAPPED_PLATFORM_CHANCE = 1 / 15;
+const TRAMPOLINE_BOUND_EFFECT_DURATION = 0.42;
 const soundSettings = {
   effects: true,
   music: true,
-  ambiance: "thriller",
+  ambiance: "you_rock_my_world",
 };
 
 const iconicCries = ["Hee-hee !", "Aoow !", "Ow !", "Ch'ki-ta !", "Hoo !", "Aah !", "Yah !"];
@@ -60,6 +63,25 @@ function createMirroredImage(source) {
   const mirroredImage = new Image();
   mirroredImage.src = canvas.toDataURL("image/png");
   return mirroredImage;
+}
+
+function createImageAsset(src) {
+  const image = new Image();
+  image.src = src;
+  return image;
+}
+
+function createVideoAsset(src) {
+  const video = document.createElement("video");
+  video.src = src;
+  video.preload = "auto";
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.setAttribute("muted", "");
+  video.setAttribute("playsinline", "");
+  video.load();
+  return video;
 }
 
 function ensureMirroredSprites() {
@@ -124,6 +146,133 @@ let gameOverSound = null;
 let ambientSound = null;
 let currentAmbiance = "";
 let animationSoundPool = [];
+const temporaryEffects = [];
+
+function preloadAmbientSound() {
+  const selectedTrack = ambientTracks[soundSettings.ambiance] || ambientTracks.thriller;
+  if (!ambientSound || currentAmbiance !== soundSettings.ambiance) {
+    if (ambientSound) {
+      ambientSound.pause();
+      ambientSound.currentTime = 0;
+    }
+    ambientSound = new Audio(selectedTrack);
+    ambientSound.preload = "auto";
+    ambientSound.loop = true;
+    ambientSound.volume = 0.35;
+    ambientSound.load();
+    currentAmbiance = soundSettings.ambiance;
+    audioStarted = false;
+  }
+}
+
+function primeFxVideos() {
+  Object.values(bonusFxVideos).forEach((video) => {
+    if (video.paused || video.ended) {
+      video.play().catch(() => {});
+    }
+  });
+}
+
+function rectsOverlap(a, b, padding = 0) {
+  return (
+    a.x < b.x + b.width + padding &&
+    a.x + a.width + padding > b.x &&
+    a.y < b.y + b.height + padding &&
+    a.y + a.height + padding > b.y
+  );
+}
+
+function getPlatformSprite(platform) {
+  if (platform.type === "trapped") return platformSprites.trapped;
+  if (platform.type === "moving") return platformSprites.moving;
+  return platformSprites.fixed;
+}
+
+function getBonusVideo(bonusType) {
+  switch (bonusType) {
+    case "accelerated":
+      return bonusFxVideos.accelerated;
+    case "invincible":
+      return bonusFxVideos.invincible;
+    case "jetpack":
+      return bonusFxVideos.jetpack;
+    case "slow":
+      return bonusFxVideos.slow;
+    case "trampoline":
+      return bonusFxVideos.trampolineLoop;
+    default:
+      return null;
+  }
+}
+
+function spawnTemporaryEffect(type, x, y, width, height, duration = TRAMPOLINE_BOUND_EFFECT_DURATION) {
+  temporaryEffects.push({
+    type,
+    x,
+    y,
+    width,
+    height,
+    life: duration,
+  });
+}
+
+function updateTemporaryEffects(delta) {
+  for (let i = temporaryEffects.length - 1; i >= 0; i -= 1) {
+    const effect = temporaryEffects[i];
+    effect.life -= delta;
+    if (effect.life <= 0) {
+      temporaryEffects.splice(i, 1);
+    }
+  }
+}
+
+function drawTemporaryEffects() {
+  for (const effect of temporaryEffects) {
+    const video = bonusFxVideos[effect.type];
+    if (!video || video.readyState < 2) continue;
+    drawVideoWithTransparentBlue(
+      video,
+      effect.x,
+      effect.y,
+      effect.width,
+      effect.height,
+      effect.life / TRAMPOLINE_BOUND_EFFECT_DURATION
+    );
+  }
+}
+
+function drawVideoWithTransparentBlue(video, x, y, width, height, alpha = 1) {
+  if (!fxKeyContext || !video || video.readyState < 2) return;
+
+  fxKeyCanvas.width = width;
+  fxKeyCanvas.height = height;
+  fxKeyContext.clearRect(0, 0, width, height);
+  fxKeyContext.drawImage(video, 0, 0, width, height);
+
+  const imageData = fxKeyContext.getImageData(0, 0, width, height);
+  const { data } = imageData;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const red = data[i];
+    const green = data[i + 1];
+    const blue = data[i + 2];
+
+    if (blue > 150 && blue > red + 20 && blue > green + 20) {
+      data[i + 3] = 0;
+      continue;
+    }
+
+    if (red > 220 && green > 220 && blue > 220) {
+      data[i + 3] = Math.floor(data[i + 3] * 0.2);
+    }
+  }
+
+  fxKeyContext.putImageData(imageData, 0, 0);
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.drawImage(fxKeyCanvas, x, y, width, height);
+  ctx.restore();
+}
 
 const ambientTracks = {
   thriller: "./Custom/Sons/AMBIENT-THRILLER.mp3",
@@ -132,6 +281,24 @@ const ambientTracks = {
   remember_the_time: "./Custom/Sons/AMBIENT-REMEMBER_THE_TIME.mp3",
   you_rock_my_world: "./Custom/Sons/AMBIENT-YOU_ROCK_MY_WORLD.mp3",
 };
+
+const platformSprites = {
+  fixed: createImageAsset("./Custom/Visuels/PLATEFORME-FIXE.png"),
+  moving: createImageAsset("./Custom/Visuels/PLATEFORME-MOBILE.png"),
+  trapped: createImageAsset("./Custom/Visuels/PLATEFORME-PIEGEE.png"),
+};
+
+const bonusFxVideos = {
+  accelerated: createVideoAsset("./Custom/Visuels/FX-ACCELERATED.mp4"),
+  invincible: createVideoAsset("./Custom/Visuels/FX-INVINCIBLE.mp4"),
+  jetpack: createVideoAsset("./Custom/Visuels/FX-JET_PACK.mp4"),
+  slow: createVideoAsset("./Custom/Visuels/FX-RALENTI.mp4"),
+  trampolineLoop: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.mp4"),
+  trampolineBound: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.mp4"),
+};
+
+const fxKeyCanvas = document.createElement("canvas");
+const fxKeyContext = fxKeyCanvas.getContext("2d", { willReadFrequently: true });
 
 function setControlState(control, isPressed) {
   if (control === "left") keys.left = isPressed;
@@ -301,6 +468,7 @@ function commitBestTime() {
 
 function setAmbiance(ambiance) {
   soundSettings.ambiance = ambiance;
+  preloadAmbientSound();
   updateSoundUI();
   if (soundSettings.music) {
     startAmbientSound();
@@ -379,26 +547,12 @@ function playAnimationSound() {
 }
 
 function startAmbientSound() {
+  preloadAmbientSound();
   if (!soundSettings.music) {
     if (ambientSound) {
       ambientSound.pause();
     }
     return;
-  }
-
-  const selectedTrack = ambientTracks[soundSettings.ambiance] || ambientTracks.thriller;
-  if (!ambientSound || currentAmbiance !== soundSettings.ambiance) {
-    if (ambientSound) {
-      ambientSound.pause();
-      ambientSound.currentTime = 0;
-    }
-    ambientSound = new Audio(selectedTrack);
-    ambientSound.preload = "auto";
-    ambientSound.loop = true;
-    ambientSound.volume = 0.35;
-    ambientSound.load();
-    currentAmbiance = soundSettings.ambiance;
-    audioStarted = false;
   }
 
   if (!ambientSound) return;
@@ -453,6 +607,8 @@ function ensureAudio() {
     }).catch(() => {});
   }
 
+  primeFxVideos();
+
   if (jumpSound) {
     startAmbientSound();
     return;
@@ -498,13 +654,14 @@ function applyAudioSettingChange() {
   }
 }
 
-function resetGame() {
+function resetGame(startPaused = false) {
   gameOver = false;
-  paused = false;
+  paused = startPaused;
   updatePauseButtonLabel();
   updatePauseQuickAudioVisibility();
   screenFlash = 0;
   particles.length = 0;
+  temporaryEffects.length = 0;
   lastTime = 0;
   cameraY = 0;
   nextPlatformY = canvas.height - 120;
@@ -521,6 +678,7 @@ function resetGame() {
   enemies.length = 0;
   messageText = "";
   messageTimer = 0;
+  preloadAmbientSound();
   createInitialPlatforms();
 
   const startPlatform = platforms[0];
@@ -536,7 +694,7 @@ function createInitialPlatforms() {
 }
 
 function pickBonusType() {
-  const bonusPool = ["jetpack", "trampoline", "invincible", "slow", "fakeSpeed"];
+  const bonusPool = ["accelerated", "trampoline", "invincible", "slow", "jetpack"];
   return bonusPool[Math.floor(Math.random() * bonusPool.length)];
 }
 
@@ -562,7 +720,39 @@ function spawnPlatformAt(y, forceX = false, index = platforms.length) {
     x = Math.max(10, Math.min(canvas.width - width - 10, safeX + jitter));
   }
 
-  const isMoving = Math.random() < 0.3;
+  const platformBounds = {
+    x,
+    y,
+    width,
+    height: 14,
+  };
+
+  let retryCount = 0;
+  while (retryCount < 12) {
+    const overlapsExisting = platforms.some((existing) => {
+      if (Math.abs(existing.y - y) > 110) return false;
+      return rectsOverlap(
+        platformBounds,
+        {
+          x: existing.x,
+          y: existing.y,
+          width: existing.width,
+          height: existing.height,
+        },
+        10
+      );
+    });
+
+    if (!overlapsExisting) break;
+
+    x = Math.max(10, Math.min(canvas.width - width - 10, Math.random() * (canvas.width - width - 20) + 10));
+    platformBounds.x = x;
+    retryCount += 1;
+  }
+
+  const canBeTrapped = index >= SAFE_PLATFORM_COUNT;
+  const isTrapped = canBeTrapped && Math.random() < TRAPPED_PLATFORM_CHANCE;
+  const isMoving = !isTrapped && Math.random() < 0.3;
   const platform = {
     x,
     baseX: x,
@@ -570,24 +760,26 @@ function spawnPlatformAt(y, forceX = false, index = platforms.length) {
     width,
     height: 14,
     isMoving,
+    type: isTrapped ? "trapped" : isMoving ? "moving" : "fixed",
     amplitude: 28 + Math.random() * 40,
     offset: Math.random() * Math.PI * 2,
     bonusType: null,
     bonusCollected: false,
     enemy: null,
+    broken: false,
+    breakTimer: 0,
+    collidable: true,
   };
 
-  if (index > 10 && Math.random() < 0.2) {
+  if (index >= SAFE_PLATFORM_COUNT && !isTrapped && Math.random() < 0.2) {
     createEnemyForPlatform(platform);
     platform.enemy = true;
   }
 
-  if (index > 10 && platform.enemy === null && Math.random() < 0.22) {
+  if (index >= SAFE_PLATFORM_COUNT && !isTrapped && platform.enemy === null && Math.random() < 0.22) {
     platform.bonusType = pickBonusType();
-  } else if (index <= 10) {
+  } else if (index < SAFE_PLATFORM_COUNT) {
     platform.bonusType = null;
-  } else if (Math.random() < 0.22) {
-    platform.bonusType = pickBonusType();
   }
 
   platforms.push(platform);
@@ -641,9 +833,9 @@ function activateBonus(type) {
       player.slowTimer = 3.4;
       messageText = "Ralentissement";
       break;
-    case "fakeSpeed":
+    case "accelerated":
       player.speedTimer = 2.6;
-      messageText = "Faux boost";
+      messageText = "Accélération !";
       break;
     default:
       break;
@@ -665,6 +857,7 @@ function update(delta) {
   player.jetpackTimer = Math.max(0, player.jetpackTimer - delta);
   player.trampolineTimer = Math.max(0, player.trampolineTimer - delta);
   messageTimer = Math.max(0, messageTimer - delta);
+  updateTemporaryEffects(delta);
 
   const moveSpeed = 240 + (player.speedTimer > 0 ? 120 : 0) - (player.slowTimer > 0 ? 90 : 0);
   const gravity = 1200 + (player.jetpackTimer > 0 ? -140 : 0) + (player.slowTimer > 0 ? 120 : 0);
@@ -696,17 +889,20 @@ function update(delta) {
   }
 
   for (const platform of platforms) {
+    if (platform.broken) continue;
+
     const playerBottom = player.y + player.height;
     const prevBottom = prevY + player.height;
     const platformTop = platform.y;
     const platformBottom = platform.y + platform.height;
 
-    if (platform.isMoving) {
+    if (platform.type === "moving") {
       const oscillation = Math.sin(performance.now() / 450 + platform.offset) * platform.amplitude;
       platform.x = platform.baseX + oscillation;
     }
 
     if (
+      platform.collidable &&
       player.vy >= 0 &&
       prevBottom <= platformTop &&
       playerBottom >= platformTop &&
@@ -717,11 +913,11 @@ function update(delta) {
       if (platform.bonusType && !platform.bonusCollected) {
         platform.bonusCollected = true;
         const bonusColor = {
+          accelerated: "#ff7bbd",
           jetpack: "#7ef7ff",
           trampoline: "#ffcf5c",
           invincible: "#ffe082",
           slow: "#8eff6f",
-          fakeSpeed: "#ff7bbd",
         }[platform.bonusType] || "#ff8f3f";
         spawnBurst(platform.x + platform.width / 2, platform.y - 10, bonusColor, 12, 180);
         screenFlash = Math.max(screenFlash, 0.08);
@@ -735,11 +931,35 @@ function update(delta) {
       if (player.trampolineTimer > 0) {
         bounceMultiplier = 1.4;
         player.trampolineTimer = 0;
+        spawnTemporaryEffect(
+          "trampolineBound",
+          player.x + player.width / 2 - 34,
+          player.y + player.height - 42,
+          68,
+          68,
+          TRAMPOLINE_BOUND_EFFECT_DURATION
+        );
       }
       playJumpSound();
       spawnBurst(player.x + player.width / 2, player.y + player.height, "#ffe082", 8, 120);
       player.vy = -jumpStrength * bounceMultiplier;
+
+      if (platform.type === "trapped") {
+        platform.broken = true;
+        platform.breakTimer = 0.22;
+        platform.collidable = false;
+      }
       break;
+    }
+  }
+
+  for (let i = platforms.length - 1; i >= 0; i -= 1) {
+    const platform = platforms[i];
+    if (platform.breakTimer > 0) {
+      platform.breakTimer -= delta;
+      if (platform.breakTimer <= 0) {
+        platforms.splice(i, 1);
+      }
     }
   }
 
@@ -850,104 +1070,26 @@ function drawPlatforms() {
     if (screenY > canvas.height + 20 || screenY < -40) continue;
 
     ctx.save();
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = platform.isMoving ? "#ffcf5c" : "#6cf8ff";
-    ctx.fillStyle = platform.isMoving ? "#ffcf5c" : "#69e0ff";
-    ctx.fillRect(platform.x, screenY, platform.width, platform.height);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.fillRect(platform.x, screenY, platform.width, 4);
+    ctx.globalAlpha = platform.broken ? Math.max(0, platform.breakTimer / 0.22) : 1;
+    const sprite = getPlatformSprite(platform);
+    if (sprite && sprite.complete) {
+      ctx.drawImage(sprite, platform.x, screenY, platform.width, platform.height);
+    } else {
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = platform.type === "moving" ? "#ffcf5c" : platform.type === "trapped" ? "#ff6f91" : "#6cf8ff";
+      ctx.fillStyle = platform.type === "moving" ? "#ffcf5c" : platform.type === "trapped" ? "#ff6f91" : "#69e0ff";
+      ctx.fillRect(platform.x, screenY, platform.width, platform.height);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.fillRect(platform.x, screenY, platform.width, 4);
+    }
     ctx.restore();
 
     if (platform.bonusType && !platform.bonusCollected) {
       ctx.save();
-      ctx.translate(platform.x + platform.width / 2, screenY - 14);
-      ctx.shadowBlur = 16;
-      ctx.shadowColor = "#ff8f3f";
-
-      const bonusColor = {
-        jetpack: "#7ef7ff",
-        trampoline: "#ffcf5c",
-        invincible: "#ffe082",
-        slow: "#8eff6f",
-        fakeSpeed: "#ff7bbd",
-      }[platform.bonusType] || "#ff8f3f";
-
-      ctx.fillStyle = bonusColor;
-      ctx.strokeStyle = "rgba(255,255,255,0.95)";
-      ctx.lineWidth = 1.4;
-
-      switch (platform.bonusType) {
-        case "jetpack":
-          ctx.beginPath();
-          ctx.moveTo(-6, 6);
-          ctx.lineTo(0, -8);
-          ctx.lineTo(6, 6);
-          ctx.lineTo(2, 6);
-          ctx.lineTo(2, 10);
-          ctx.lineTo(-2, 10);
-          ctx.lineTo(-2, 6);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          break;
-        case "trampoline":
-          ctx.fillRect(-6, -2, 12, 6);
-          ctx.fillRect(-4, -8, 8, 6);
-          ctx.strokeRect(-6, -2, 12, 6);
-          ctx.strokeRect(-4, -8, 8, 6);
-          break;
-        case "invincible":
-          ctx.beginPath();
-          ctx.moveTo(0, -8);
-          ctx.lineTo(2.4, -2.6);
-          ctx.lineTo(8, -2.2);
-          ctx.lineTo(3.6, 1.4);
-          ctx.lineTo(5.2, 7.4);
-          ctx.lineTo(0, 3.8);
-          ctx.lineTo(-5.2, 7.4);
-          ctx.lineTo(-3.6, 1.4);
-          ctx.lineTo(-8, -2.2);
-          ctx.lineTo(-2.4, -2.6);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          break;
-        case "slow":
-          ctx.beginPath();
-          ctx.arc(0, 0, 7, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(0, -7);
-          ctx.lineTo(0, -3.2);
-          ctx.moveTo(0, 3.2);
-          ctx.lineTo(0, 7);
-          ctx.moveTo(-7, 0);
-          ctx.lineTo(-3.2, 0);
-          ctx.moveTo(3.2, 0);
-          ctx.lineTo(7, 0);
-          ctx.stroke();
-          break;
-        case "fakeSpeed":
-          ctx.beginPath();
-          ctx.moveTo(-5, 0);
-          ctx.lineTo(0, -6);
-          ctx.lineTo(-1, -1);
-          ctx.lineTo(5, 0);
-          ctx.lineTo(0, 6);
-          ctx.lineTo(1, 1);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          break;
-        default:
-          ctx.beginPath();
-          ctx.arc(0, 0, 8, 0, Math.PI * 2);
-          ctx.fill();
-          break;
+      const bonusVideo = getBonusVideo(platform.bonusType);
+      if (bonusVideo && bonusVideo.readyState >= 2) {
+        drawVideoWithTransparentBlue(bonusVideo, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
       }
       ctx.restore();
     }
@@ -1040,6 +1182,10 @@ function drawPlayer() {
   ctx.restore();
 }
 
+function drawVideoEffects() {
+  drawTemporaryEffects();
+}
+
 function drawScore() {
   ctx.save();
   ctx.textAlign = "center";
@@ -1099,6 +1245,7 @@ function loop(timestamp) {
   drawPlatforms();
   drawEnemies();
   drawPlayer();
+  drawVideoEffects();
   drawParticles();
   drawScore();
   drawFlash();
@@ -1208,6 +1355,7 @@ if (swipeArea) {
 
 resizeCanvas();
 backgroundVideo?.play().catch(() => {});
-resetGame();
+resetGame(true);
+updateSoundUI();
 requestAnimationFrame(loop);
 window.addEventListener("resize", resizeCanvas);
