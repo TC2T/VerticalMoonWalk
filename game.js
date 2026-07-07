@@ -1,5 +1,9 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = "high";
+ctx.lineCap = "round";
+ctx.lineJoin = "round";
 const restartButton = document.getElementById("restartButton");
 const pauseButton = document.getElementById("pauseButton");
 const pauseButtonImg = pauseButton?.querySelector("img");
@@ -257,8 +261,13 @@ function drawVideoWithTransparentBlue(video, x, y, width, height, alpha = 1) {
     const green = data[i + 1];
     const blue = data[i + 2];
 
-    if (blue > 150 && blue > red + 20 && blue > green + 20) {
+    if (blue > 205 && red < 110 && green < 175) {
       data[i + 3] = 0;
+      continue;
+    }
+
+    if (blue > 180 && red < 140 && green < 190) {
+      data[i + 3] = Math.floor(data[i + 3] * 0.35);
       continue;
     }
 
@@ -299,6 +308,10 @@ const bonusFxVideos = {
 
 const fxKeyCanvas = document.createElement("canvas");
 const fxKeyContext = fxKeyCanvas.getContext("2d", { willReadFrequently: true });
+if (fxKeyContext) {
+  fxKeyContext.imageSmoothingEnabled = true;
+  fxKeyContext.imageSmoothingQuality = "high";
+}
 
 function setControlState(control, isPressed) {
   if (control === "left") keys.left = isPressed;
@@ -818,23 +831,23 @@ function ensurePlatforms() {
 function activateBonus(type) {
   switch (type) {
     case "jetpack":
-      player.jetpackTimer = 2.4;
-      messageText = "Jetpack !";
+      player.jetpackTimer = 5;
+      messageText = "Fusée !";
       break;
     case "trampoline":
       player.trampolineTimer = 0.7;
       messageText = "Trampoline !";
       break;
     case "invincible":
-      player.invincibleTimer = 3.2;
+      player.invincibleTimer = 5;
       messageText = "Invincible !";
       break;
     case "slow":
-      player.slowTimer = 3.4;
+      player.slowTimer = 5;
       messageText = "Ralentissement";
       break;
     case "accelerated":
-      player.speedTimer = 2.6;
+      player.speedTimer = 5;
       messageText = "Accélération !";
       break;
     default:
@@ -859,7 +872,7 @@ function update(delta) {
   messageTimer = Math.max(0, messageTimer - delta);
   updateTemporaryEffects(delta);
 
-  const moveSpeed = 240 + (player.speedTimer > 0 ? 120 : 0) - (player.slowTimer > 0 ? 90 : 0);
+  const moveSpeed = 240 * (player.speedTimer > 0 ? 2 : 1) * (player.slowTimer > 0 ? 0.5 : 1);
   const gravity = 1200 + (player.jetpackTimer > 0 ? -140 : 0) + (player.slowTimer > 0 ? 120 : 0);
   const jumpStrength = 560 + (player.speedTimer > 0 ? 25 : 0);
 
@@ -878,7 +891,7 @@ function update(delta) {
   const prevY = player.y;
   player.vy += gravity * delta;
   if (player.jetpackTimer > 0) {
-    player.vy -= 220 * delta;
+    player.vy -= 680 * delta;
   }
   player.y += player.vy * delta;
 
@@ -928,7 +941,9 @@ function update(delta) {
 
       player.y = platformTop - player.height;
       let bounceMultiplier = 1;
-      if (player.trampolineTimer > 0) {
+      if (player.jetpackTimer > 0) {
+        bounceMultiplier = 3;
+      } else if (player.trampolineTimer > 0) {
         bounceMultiplier = 1.4;
         player.trampolineTimer = 0;
         spawnTemporaryEffect(
