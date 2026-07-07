@@ -261,13 +261,8 @@ function drawVideoWithTransparentBlue(video, x, y, width, height, alpha = 1) {
     const green = data[i + 1];
     const blue = data[i + 2];
 
-    if (blue > 205 && red < 110 && green < 175) {
+    if (blue > 135 && blue > red + 28 && blue > green + 18) {
       data[i + 3] = 0;
-      continue;
-    }
-
-    if (blue > 180 && red < 140 && green < 190) {
-      data[i + 3] = Math.floor(data[i + 3] * 0.35);
       continue;
     }
 
@@ -874,7 +869,7 @@ function update(delta) {
 
   const moveSpeed = 240 * (player.speedTimer > 0 ? 2 : 1) * (player.slowTimer > 0 ? 0.5 : 1);
   const gravity = 1200 + (player.jetpackTimer > 0 ? -140 : 0) + (player.slowTimer > 0 ? 120 : 0);
-  const jumpStrength = 560 + (player.speedTimer > 0 ? 25 : 0);
+  const jumpStrength = 560;
 
   player.vx = 0;
   if (keys.left) player.vx -= moveSpeed;
