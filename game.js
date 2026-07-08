@@ -180,6 +180,12 @@ function primeFxVideos() {
   if (fxMediaPrimed) return;
   Object.values(bonusFxVideos).forEach((media) => {
     if (!media) return;
+    if (typeof media.play === "function") {
+      if (media.paused || media.ended) {
+        media.play().catch(() => {});
+      }
+      return;
+    }
     if (typeof media.decode === "function") {
       media.decode().catch(() => {});
     }
@@ -189,6 +195,7 @@ function primeFxVideos() {
 
 function isRenderableMedia(media) {
   if (!media) return false;
+  if (typeof media.readyState === "number") return media.readyState >= 2;
   return Boolean(media.complete && media.naturalWidth > 0);
 }
 
@@ -331,12 +338,12 @@ const platformSprites = {
 };
 
 const bonusFxVideos = {
-  accelerated: createImageAsset("./Custom/Visuels/FX-ACCELERATED.gif"),
-  invincible: createImageAsset("./Custom/Visuels/FX-INVINCIBLE.gif"),
-  jetpack: createImageAsset("./Custom/Visuels/FX-JET_PACK.gif"),
-  slow: createImageAsset("./Custom/Visuels/FX-RALENTI.gif"),
-  trampolineLoop: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.gif"),
-  trampolineBound: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.gif"),
+  accelerated: createVideoAsset("./Custom/Visuels/FX-ACCELERATED.mp4"),
+  invincible: createVideoAsset("./Custom/Visuels/FX-INVINCIBLE.mp4"),
+  jetpack: createVideoAsset("./Custom/Visuels/FX-JET_PACK.mp4"),
+  slow: createVideoAsset("./Custom/Visuels/FX-RALENTI.mp4"),
+  trampolineLoop: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.mp4"),
+  trampolineBound: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.mp4"),
 };
 
 function setControlState(control, isPressed) {
