@@ -270,6 +270,15 @@ function drawRenderableMedia(media, x, y, width, height, alpha = 1) {
   ctx.restore();
 }
 
+function drawPlatformSpritePreserveAspect(sprite, x, y, width, height) {
+  const sourceWidth = sprite.naturalWidth || sprite.width || width;
+  const sourceHeight = sprite.naturalHeight || sprite.height || height;
+  const ratio = sourceHeight / Math.max(1, sourceWidth);
+  const drawHeight = Math.max(height, width * ratio);
+  const drawY = y - (drawHeight - height) * 0.5;
+  ctx.drawImage(sprite, x, drawY, width, drawHeight);
+}
+
 const ambientTracks = {
   thriller: "./Custom/Sons/AMBIENT-THRILLER.mp3",
   beat_it: "./Custom/Sons/AMBIENT-BEAT_IT.mp3",
@@ -1076,10 +1085,9 @@ function drawPlatforms() {
     ctx.globalAlpha = platform.broken ? Math.max(0, platform.breakTimer / 0.22) : 1;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.filter = "blur(0.2px)";
     const sprite = getPlatformSprite(platform);
     if (sprite && sprite.complete) {
-      ctx.drawImage(sprite, platform.x, screenY, platform.width, platform.height);
+      drawPlatformSpritePreserveAspect(sprite, platform.x, screenY, platform.width, platform.height);
     } else {
       ctx.shadowBlur = 20;
       ctx.shadowColor = platform.type === "moving" ? "#ffcf5c" : platform.type === "trapped" ? "#ff6f91" : "#6cf8ff";
@@ -1089,7 +1097,6 @@ function drawPlatforms() {
       ctx.fillStyle = "rgba(255,255,255,0.28)";
       ctx.fillRect(platform.x, screenY, platform.width, 4);
     }
-    ctx.filter = "none";
     ctx.restore();
 
     if (platform.bonusType && !platform.bonusCollected) {
