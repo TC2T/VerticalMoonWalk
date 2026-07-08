@@ -44,6 +44,8 @@ let playerSpriteJumpMirror = null;
 const SAFE_PLATFORM_COUNT = 10;
 const TRAPPED_PLATFORM_CHANCE = 1 / 15;
 const TRAMPOLINE_BOUND_EFFECT_DURATION = 0.42;
+const FX_BLACK_KEY_THRESHOLD = 28;
+const FX_BLACK_KEY_FEATHER = 26;
 const soundSettings = {
   effects: true,
   music: true,
@@ -158,6 +160,8 @@ let jumpSoundPool = [];
 let gameOverSoundPool = [];
 let fxMediaPrimed = false;
 const temporaryEffects = [];
+let fxKeyCanvas = null;
+let fxKeyContext = null;
 
 function preloadAmbientSound() {
   const selectedTrack = ambientTracks[soundSettings.ambiance] || ambientTracks.thriller;
@@ -279,9 +283,68 @@ function drawTemporaryEffects() {
 
 function drawRenderableMedia(media, x, y, width, height, alpha = 1) {
   if (!isRenderableMedia(media)) return;
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  if (typeof media.readyState === "number") {
+    drawVideoWithBlackKey(media, x, y, width, height, clampedAlpha);
+    return;
+  }
   ctx.save();
-  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.globalAlpha = clampedAlpha;
   ctx.drawImage(media, x, y, width, height);
+  ctx.restore();
+}
+
+function ensureFxKeyBuffer(width, height) {
+  const safeWidth = Math.max(1, Math.round(width));
+  const safeHeight = Math.max(1, Math.round(height));
+  if (!fxKeyCanvas) {
+    fxKeyCanvas = document.createElement("canvas");
+    fxKeyContext = fxKeyCanvas.getContext("2d", { willReadFrequently: true });
+  }
+  if (!fxKeyContext) return null;
+  if (fxKeyCanvas.width !== safeWidth || fxKeyCanvas.height !== safeHeight) {
+    fxKeyCanvas.width = safeWidth;
+    fxKeyCanvas.height = safeHeight;
+  }
+  return fxKeyContext;
+}
+
+function drawVideoWithBlackKey(media, x, y, width, height, alpha = 1) {
+  const bufferContext = ensureFxKeyBuffer(width, height);
+  if (!bufferContext || !fxKeyCanvas) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(media, x, y, width, height);
+    ctx.restore();
+    return;
+  }
+
+  const safeWidth = fxKeyCanvas.width;
+  const safeHeight = fxKeyCanvas.height;
+  bufferContext.clearRect(0, 0, safeWidth, safeHeight);
+  bufferContext.drawImage(media, 0, 0, safeWidth, safeHeight);
+
+  const frame = bufferContext.getImageData(0, 0, safeWidth, safeHeight);
+  const pixels = frame.data;
+  const hardCut = FX_BLACK_KEY_THRESHOLD;
+  const softRange = FX_BLACK_KEY_FEATHER;
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const maxChannel = Math.max(pixels[i], pixels[i + 1], pixels[i + 2]);
+    if (maxChannel <= hardCut) {
+      pixels[i + 3] = 0;
+      continue;
+    }
+    if (maxChannel < hardCut + softRange) {
+      const ratio = (maxChannel - hardCut) / softRange;
+      pixels[i + 3] = Math.round(pixels[i + 3] * ratio);
+    }
+  }
+
+  bufferContext.putImageData(frame, 0, 0);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(fxKeyCanvas, x, y, width, height);
   ctx.restore();
 }
 
@@ -292,7 +355,6 @@ function drawBonusFallback(type, x, y) {
     trampoline: "#ffcf5c",
     invincible: "#ffe082",
     slow: "#8eff6f",
-    trampolineBound: "#ffcf5c",
   }[type] || "#ff8f3f";
 
   ctx.save();
@@ -343,7 +405,6 @@ const bonusFxVideos = {
   jetpack: createVideoAsset("./Custom/Visuels/FX-JET_PACK.mp4"),
   slow: createVideoAsset("./Custom/Visuels/FX-RALENTI.mp4"),
   trampolineLoop: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.mp4"),
-  trampolineBound: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.mp4"),
 };
 
 function setControlState(control, isPressed) {
@@ -1004,7 +1065,7 @@ function update(delta) {
         bounceMultiplier = 1.4;
         player.trampolineTimer = 0;
         spawnTemporaryEffect(
-          "trampolineBound",
+          "trampolineLoop",
           player.x + player.width / 2 - 34,
           player.y + player.height - 42,
           68,
