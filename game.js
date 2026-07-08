@@ -17,6 +17,10 @@ const ambianceSelect = document.getElementById("ambianceSelect");
 const pauseAmbianceSelect = document.getElementById("pauseAmbianceSelect");
 const backgroundVideo = document.getElementById("gameBackground");
 const swipeArea = document.getElementById("swipeArea");
+const isMobileDevice =
+  window.matchMedia("(pointer: coarse)").matches ||
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+const performanceMode = isMobileDevice ? "lite" : "full";
 
 let isDragging = false;
 let dragStartX = 0;
@@ -174,6 +178,10 @@ function preloadAmbientSound() {
 
 function primeFxVideos() {
   if (fxMediaPrimed) return;
+  if (performanceMode === "lite") {
+    fxMediaPrimed = true;
+    return;
+  }
   Object.values(bonusFxVideos).forEach((media) => {
     if (!media) return;
     if (typeof media.play === "function") {
@@ -253,6 +261,7 @@ function updateTemporaryEffects(delta) {
 }
 
 function drawTemporaryEffects() {
+  if (performanceMode === "lite") return;
   for (const effect of temporaryEffects) {
     const media = bonusFxVideos[effect.type];
     if (!isRenderableMedia(media)) continue;
@@ -272,6 +281,27 @@ function drawRenderableMedia(media, x, y, width, height, alpha = 1) {
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
   ctx.drawImage(media, x, y, width, height);
+  ctx.restore();
+}
+
+function drawBonusFallback(type, x, y) {
+  const color = {
+    accelerated: "#ff7bbd",
+    jetpack: "#7ef7ff",
+    trampoline: "#ffcf5c",
+    invincible: "#ffe082",
+    slow: "#8eff6f",
+  }[type] || "#ff8f3f";
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -392,7 +422,9 @@ function resizeCanvas() {
 }
 
 function spawnBurst(x, y, color, count = 10, speed = 140) {
+  const effectiveCount = performanceMode === "lite" ? Math.max(4, Math.floor(count * 0.55)) : count;
   for (let i = 0; i < count; i += 1) {
+    if (i >= effectiveCount) break;
     const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
     const velocity = speed * (0.6 + Math.random() * 0.4);
     particles.push({
@@ -557,7 +589,7 @@ function playAnimationSound() {
   if (animationSoundPool.length === 0) return;
   const randomOffset = Math.floor(Math.random() * animationSoundPool.length);
   const shuffledPool = animationSoundPool.slice(randomOffset).concat(animationSoundPool.slice(0, randomOffset));
-  playFromPool(shuffledPool, true);
+  playFromPool(shuffledPool, false);
 }
 
 function startAmbientSound() {
@@ -1070,7 +1102,7 @@ function drawBackground() {
   gradient.addColorStop(0.5, "rgba(8, 10, 18, 0.45)");
   gradient.addColorStop(1, "rgba(3, 4, 10, 0.8)");
 
-  if (backgroundVideo && backgroundVideo.readyState >= 2) {
+  if (performanceMode === "full" && backgroundVideo && backgroundVideo.readyState >= 2) {
     ctx.save();
     ctx.drawImage(backgroundVideo, 0, 0, canvas.width, canvas.height);
     ctx.globalCompositeOperation = "source-over";
@@ -1085,7 +1117,8 @@ function drawBackground() {
   ctx.save();
   ctx.globalAlpha = 0.12;
   ctx.fillStyle = "#ffffff";
-  for (let i = 0; i < 22; i += 1) {
+  const dotCount = performanceMode === "lite" ? 10 : 22;
+  for (let i = 0; i < dotCount; i += 1) {
     const x = ((i * 59 + cameraY * 0.03) % (canvas.width + 40)) - 20;
     const y = ((i * 113 + cameraY * 0.01) % (canvas.height + 40)) - 20;
     ctx.beginPath();
@@ -1108,7 +1141,7 @@ function drawPlatforms() {
     if (sprite && sprite.complete) {
       drawPlatformSpritePreserveAspect(sprite, platform.x, screenY, platform.width, platform.height);
     } else {
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = performanceMode === "lite" ? 0 : 20;
       ctx.shadowColor = platform.type === "moving" ? "#ffcf5c" : platform.type === "trapped" ? "#ff6f91" : "#6cf8ff";
       ctx.fillStyle = platform.type === "moving" ? "#ffcf5c" : platform.type === "trapped" ? "#ff6f91" : "#69e0ff";
       ctx.fillRect(platform.x, screenY, platform.width, platform.height);
@@ -1120,9 +1153,13 @@ function drawPlatforms() {
 
     if (platform.bonusType && !platform.bonusCollected) {
       ctx.save();
-      const bonusMedia = getBonusVideo(platform.bonusType);
-      if (isRenderableMedia(bonusMedia)) {
-        drawRenderableMedia(bonusMedia, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
+      if (performanceMode === "lite") {
+        drawBonusFallback(platform.bonusType, platform.x + platform.width / 2, screenY - 22);
+      } else {
+        const bonusMedia = getBonusVideo(platform.bonusType);
+        if (isRenderableMedia(bonusMedia)) {
+          drawRenderableMedia(bonusMedia, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
+        }
       }
       ctx.restore();
     }
@@ -1138,7 +1175,7 @@ function drawEnemies() {
     const sprite = zombieSprites[family][enemy.direction < 0 ? "gauche" : "droite"];
     if (sprite && sprite.complete) {
       ctx.save();
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = performanceMode === "lite" ? 8 : 16;
       ctx.shadowColor = "#74ff7e";
       ctx.drawImage(sprite, enemy.x - 4, screenY - 4, enemy.width + 8, enemy.height + 8);
       ctx.restore();
@@ -1178,7 +1215,7 @@ function drawPlayer() {
     : (lastDirection < 0 ? playerSpriteContactMirror || playerSpriteContact : playerSpriteContact);
   if (sprite && sprite.complete) {
     ctx.save();
-    ctx.shadowBlur = 24;
+    ctx.shadowBlur = performanceMode === "lite" ? 10 : 24;
     ctx.shadowColor = player.invincibleTimer > 0 ? "#8af6ff" : "#ff4bd8";
     ctx.drawImage(sprite, player.x - 8, screenY - 8, player.width + 16, player.height + 16);
     ctx.restore();
@@ -1387,7 +1424,11 @@ if (swipeArea) {
 }
 
 resizeCanvas();
-backgroundVideo?.play().catch(() => {});
+if (performanceMode === "full") {
+  backgroundVideo?.play().catch(() => {});
+} else if (backgroundVideo) {
+  backgroundVideo.pause();
+}
 resetGame(true);
 updateSoundUI();
 requestAnimationFrame(loop);
