@@ -249,10 +249,10 @@ function updateTemporaryEffects(delta) {
 
 function drawTemporaryEffects() {
   for (const effect of temporaryEffects) {
-    const video = bonusFxVideos[effect.type];
-    if (!isRenderableMedia(video)) continue;
-    drawVideoWithTransparentBlue(
-      video,
+    const media = bonusFxVideos[effect.type];
+    if (!isRenderableMedia(media)) continue;
+    drawRenderableMedia(
+      media,
       effect.x,
       effect.y,
       effect.width,
@@ -262,36 +262,11 @@ function drawTemporaryEffects() {
   }
 }
 
-function drawVideoWithTransparentBlue(video, x, y, width, height, alpha = 1) {
-  if (!fxKeyContext || !isRenderableMedia(video)) return;
-
-  fxKeyCanvas.width = width;
-  fxKeyCanvas.height = height;
-  fxKeyContext.clearRect(0, 0, width, height);
-  fxKeyContext.drawImage(video, 0, 0, width, height);
-
-  const imageData = fxKeyContext.getImageData(0, 0, width, height);
-  const { data } = imageData;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const red = data[i];
-    const green = data[i + 1];
-    const blue = data[i + 2];
-
-    if (blue > 95 && blue > red + 16 && blue > green + 8) {
-      data[i + 3] = 0;
-      continue;
-    }
-
-    if (red > 220 && green > 220 && blue > 220) {
-      data[i + 3] = Math.floor(data[i + 3] * 0.2);
-    }
-  }
-
-  fxKeyContext.putImageData(imageData, 0, 0);
+function drawRenderableMedia(media, x, y, width, height, alpha = 1) {
+  if (!isRenderableMedia(media)) return;
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-  ctx.drawImage(fxKeyCanvas, x, y, width, height);
+  ctx.drawImage(media, x, y, width, height);
   ctx.restore();
 }
 
@@ -310,20 +285,13 @@ const platformSprites = {
 };
 
 const bonusFxVideos = {
-  accelerated: createImageAsset("./Custom/Visuels/FX-ACCELERATED.gif"),
-  invincible: createImageAsset("./Custom/Visuels/FX-INVINCIBLE.gif"),
-  jetpack: createImageAsset("./Custom/Visuels/FX-JET_PACK.gif"),
-  slow: createImageAsset("./Custom/Visuels/FX-RALENTI.gif"),
-  trampolineLoop: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.gif"),
-  trampolineBound: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.gif"),
+  accelerated: createVideoAsset("./Custom/Visuels/FX-ACCELERATED.webm"),
+  invincible: createVideoAsset("./Custom/Visuels/FX-INVINCIBLE.webm"),
+  jetpack: createVideoAsset("./Custom/Visuels/FX-JET_PACK.webm"),
+  slow: createVideoAsset("./Custom/Visuels/FX-RALENTI.webm"),
+  trampolineLoop: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.webm"),
+  trampolineBound: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.webm"),
 };
-
-const fxKeyCanvas = document.createElement("canvas");
-const fxKeyContext = fxKeyCanvas.getContext("2d", { willReadFrequently: true });
-if (fxKeyContext) {
-  fxKeyContext.imageSmoothingEnabled = true;
-  fxKeyContext.imageSmoothingQuality = "high";
-}
 
 function setControlState(control, isPressed) {
   if (control === "left") keys.left = isPressed;
@@ -505,6 +473,7 @@ function togglePause() {
   updatePauseButtonLabel();
   updatePauseQuickAudioVisibility();
   if (!paused) {
+    startAmbientSound();
     lastTime = performance.now();
   }
 }
@@ -1125,9 +1094,9 @@ function drawPlatforms() {
 
     if (platform.bonusType && !platform.bonusCollected) {
       ctx.save();
-      const bonusVideo = getBonusVideo(platform.bonusType);
-      if (isRenderableMedia(bonusVideo)) {
-        drawVideoWithTransparentBlue(bonusVideo, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
+      const bonusMedia = getBonusVideo(platform.bonusType);
+      if (isRenderableMedia(bonusMedia)) {
+        drawRenderableMedia(bonusMedia, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
       }
       ctx.restore();
     }
