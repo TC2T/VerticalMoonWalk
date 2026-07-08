@@ -46,6 +46,9 @@ const TRAPPED_PLATFORM_CHANCE = 1 / 15;
 const TRAMPOLINE_BOUND_EFFECT_DURATION = 0.42;
 const FX_BLACK_KEY_THRESHOLD = 28;
 const FX_BLACK_KEY_FEATHER = 26;
+const FX_BLACK_KEY_THRESHOLD_MOBILE = 58;
+const FX_BLACK_KEY_FEATHER_MOBILE = 46;
+const FX_BLACK_NEUTRAL_CHROMA_LIMIT = 34;
 const soundSettings = {
   effects: true,
   music: true,
@@ -326,17 +329,26 @@ function drawVideoWithBlackKey(media, x, y, width, height, alpha = 1) {
 
   const frame = bufferContext.getImageData(0, 0, safeWidth, safeHeight);
   const pixels = frame.data;
-  const hardCut = FX_BLACK_KEY_THRESHOLD;
-  const softRange = FX_BLACK_KEY_FEATHER;
+  const hardCut = isMobileDevice ? FX_BLACK_KEY_THRESHOLD_MOBILE : FX_BLACK_KEY_THRESHOLD;
+  const softRange = isMobileDevice ? FX_BLACK_KEY_FEATHER_MOBILE : FX_BLACK_KEY_FEATHER;
+  const softLimit = hardCut + softRange;
 
   for (let i = 0; i < pixels.length; i += 4) {
-    const maxChannel = Math.max(pixels[i], pixels[i + 1], pixels[i + 2]);
-    if (maxChannel <= hardCut) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const b = pixels[i + 2];
+    const maxChannel = Math.max(r, g, b);
+    const minChannel = Math.min(r, g, b);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const chroma = maxChannel - minChannel;
+    const isNearNeutralDark = chroma <= FX_BLACK_NEUTRAL_CHROMA_LIMIT && luma <= softLimit;
+
+    if (luma <= hardCut || (isMobileDevice && isNearNeutralDark && luma <= hardCut + softRange * 0.85)) {
       pixels[i + 3] = 0;
       continue;
     }
-    if (maxChannel < hardCut + softRange) {
-      const ratio = (maxChannel - hardCut) / softRange;
+    if (luma < softLimit) {
+      const ratio = (luma - hardCut) / softRange;
       pixels[i + 3] = Math.round(pixels[i + 3] * ratio);
     }
   }
