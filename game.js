@@ -17,6 +17,8 @@ const ambianceSelect = document.getElementById("ambianceSelect");
 const pauseAmbianceSelect = document.getElementById("pauseAmbianceSelect");
 const backgroundVideo = document.getElementById("gameBackground");
 const swipeArea = document.getElementById("swipeArea");
+const webmProbe = document.createElement("video");
+const supportsWebmVideo = Boolean(webmProbe.canPlayType && webmProbe.canPlayType("video/webm"));
 const isMobileDevice =
   window.matchMedia("(pointer: coarse)").matches ||
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
@@ -178,6 +180,10 @@ function preloadAmbientSound() {
 
 function primeFxVideos() {
   if (fxMediaPrimed) return;
+  if (!supportsWebmVideo) {
+    fxMediaPrimed = true;
+    return;
+  }
   Object.values(bonusFxVideos).forEach((media) => {
     if (!media) return;
     if (typeof media.play === "function") {
@@ -259,15 +265,21 @@ function updateTemporaryEffects(delta) {
 function drawTemporaryEffects() {
   for (const effect of temporaryEffects) {
     const media = bonusFxVideos[effect.type];
-    if (!isRenderableMedia(media)) continue;
-    drawRenderableMedia(
-      media,
-      effect.x,
-      effect.y,
-      effect.width,
-      effect.height,
-      effect.life / TRAMPOLINE_BOUND_EFFECT_DURATION
-    );
+    if (isRenderableMedia(media)) {
+      drawRenderableMedia(
+        media,
+        effect.x,
+        effect.y,
+        effect.width,
+        effect.height,
+        effect.life / TRAMPOLINE_BOUND_EFFECT_DURATION
+      );
+      continue;
+    }
+
+    const centerX = effect.x + effect.width / 2;
+    const centerY = effect.y + effect.height / 2;
+    drawBonusFallback(effect.type || "trampoline", centerX, centerY);
   }
 }
 
@@ -286,6 +298,7 @@ function drawBonusFallback(type, x, y) {
     trampoline: "#ffcf5c",
     invincible: "#ffe082",
     slow: "#8eff6f",
+    trampolineBound: "#ffcf5c",
   }[type] || "#ff8f3f";
 
   ctx.save();
@@ -298,6 +311,13 @@ function drawBonusFallback(type, x, y) {
   ctx.fill();
   ctx.stroke();
   ctx.restore();
+}
+
+function startBackgroundVideo() {
+  if (!backgroundVideo) return;
+  if (backgroundVideo.paused || backgroundVideo.ended) {
+    backgroundVideo.play().catch(() => {});
+  }
 }
 
 function drawPlatformSpritePreserveAspect(sprite, x, y, width, height) {
@@ -514,6 +534,7 @@ function togglePause() {
   updatePauseButtonLabel();
   updatePauseQuickAudioVisibility();
   if (!paused) {
+    startBackgroundVideo();
     startAmbientSound();
     lastTime = performance.now();
   }
@@ -650,6 +671,7 @@ function ensureAudio() {
 
   if (jumpSound) {
     primeFxVideos();
+    startBackgroundVideo();
     startAmbientSound();
     return;
   }
@@ -685,6 +707,7 @@ function ensureAudio() {
   });
 
   primeFxVideos();
+  startBackgroundVideo();
 
   startAmbientSound();
 }
@@ -1417,7 +1440,7 @@ if (swipeArea) {
 }
 
 resizeCanvas();
-backgroundVideo?.play().catch(() => {});
+startBackgroundVideo();
 resetGame(true);
 updateSoundUI();
 requestAnimationFrame(loop);
