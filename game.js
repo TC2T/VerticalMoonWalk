@@ -150,6 +150,9 @@ let gameOverSound = null;
 let ambientSound = null;
 let currentAmbiance = "";
 let animationSoundPool = [];
+let jumpSoundPool = [];
+let gameOverSoundPool = [];
+let fxMediaPrimed = false;
 const temporaryEffects = [];
 
 function preloadAmbientSound() {
@@ -170,6 +173,7 @@ function preloadAmbientSound() {
 }
 
 function primeFxVideos() {
+  if (fxMediaPrimed) return;
   Object.values(bonusFxVideos).forEach((media) => {
     if (!media) return;
     if (typeof media.play === "function") {
@@ -182,6 +186,7 @@ function primeFxVideos() {
       media.decode().catch(() => {});
     }
   });
+  fxMediaPrimed = true;
 }
 
 function isRenderableMedia(media) {
@@ -488,7 +493,7 @@ function togglePause() {
 }
 
 function stopAllEffectSounds() {
-  [jumpSound, gameOverSound, ...animationSoundPool].forEach((sound) => {
+  [...jumpSoundPool, ...gameOverSoundPool, ...animationSoundPool].forEach((sound) => {
     if (sound && sound.currentSrc) {
       sound.pause();
       sound.currentTime = 0;
@@ -496,11 +501,21 @@ function stopAllEffectSounds() {
   });
 }
 
+function playFromPool(pool, restartIfBusy = false) {
+  if (!pool || pool.length === 0) return false;
+  const idleSound = pool.find((sound) => sound && (sound.paused || sound.ended));
+  const soundToPlay = idleSound || (restartIfBusy ? pool[0] : null);
+  if (!soundToPlay || !soundToPlay.currentSrc) return false;
+  if (!(soundToPlay.paused || soundToPlay.ended)) {
+    soundToPlay.currentTime = 0;
+  }
+  soundToPlay.play().catch(() => {});
+  return true;
+}
+
 function playJumpSound() {
   if (!soundSettings.effects) return;
-  if (jumpSound && jumpSound.currentSrc) {
-    jumpSound.currentTime = 0;
-    jumpSound.play().catch(() => {});
+  if (playFromPool(jumpSoundPool, true)) {
     return;
   }
 
@@ -519,9 +534,7 @@ function playJumpSound() {
 
 function playGameOverSound() {
   if (!soundSettings.effects) return;
-  if (gameOverSound && gameOverSound.currentSrc) {
-    gameOverSound.currentTime = 0;
-    gameOverSound.play().catch(() => {});
+  if (playFromPool(gameOverSoundPool, true)) {
     return;
   }
 
@@ -542,11 +555,9 @@ function playGameOverSound() {
 function playAnimationSound() {
   if (!soundSettings.effects) return;
   if (animationSoundPool.length === 0) return;
-  const sound = animationSoundPool[Math.floor(Math.random() * animationSoundPool.length)];
-  if (sound && sound.currentSrc) {
-    sound.currentTime = 0;
-    sound.play().catch(() => {});
-  }
+  const randomOffset = Math.floor(Math.random() * animationSoundPool.length);
+  const shuffledPool = animationSoundPool.slice(randomOffset).concat(animationSoundPool.slice(0, randomOffset));
+  playFromPool(shuffledPool, true);
 }
 
 function startAmbientSound() {
@@ -610,9 +621,8 @@ function ensureAudio() {
     }).catch(() => {});
   }
 
-  primeFxVideos();
-
   if (jumpSound) {
+    primeFxVideos();
     startAmbientSound();
     return;
   }
@@ -626,6 +636,8 @@ function ensureAudio() {
 
   jumpSound = createSound("./Custom/Sons/MJ-Jump.mp3");
   gameOverSound = createSound("./Custom/Sons/MJ-Fall.mp3");
+  jumpSoundPool = [jumpSound, createSound("./Custom/Sons/MJ-Jump.mp3"), createSound("./Custom/Sons/MJ-Jump.mp3")];
+  gameOverSoundPool = [gameOverSound, createSound("./Custom/Sons/MJ-Fall.mp3")];
   animationSoundPool = [
     createSound("./Custom/Sons/MJ-Aww.mp3"),
     createSound("./Custom/Sons/MJ-Aww2.mp3"),
@@ -638,6 +650,14 @@ function ensureAudio() {
   animationSoundPool.forEach((sound) => {
     sound.volume = 0.85;
   });
+  jumpSoundPool.forEach((sound) => {
+    sound.volume = 0.85;
+  });
+  gameOverSoundPool.forEach((sound) => {
+    sound.volume = 0.9;
+  });
+
+  primeFxVideos();
 
   startAmbientSound();
 }
@@ -928,7 +948,6 @@ function update(delta) {
         }[platform.bonusType] || "#ff8f3f";
         spawnBurst(platform.x + platform.width / 2, platform.y - 10, bonusColor, 12, 180);
         screenFlash = Math.max(screenFlash, 0.08);
-        playAnimationSound();
         playIconicCry();
         activateBonus(platform.bonusType);
       }
