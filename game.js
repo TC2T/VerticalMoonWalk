@@ -170,11 +170,28 @@ function preloadAmbientSound() {
 }
 
 function primeFxVideos() {
-  Object.values(bonusFxVideos).forEach((video) => {
-    if (video.paused || video.ended) {
-      video.play().catch(() => {});
+  Object.values(bonusFxVideos).forEach((media) => {
+    if (!media) return;
+    if (typeof media.play === "function") {
+      if (media.paused || media.ended) {
+        media.play().catch(() => {});
+      }
+      return;
+    }
+    if (typeof media.decode === "function") {
+      media.decode().catch(() => {});
     }
   });
+}
+
+function isRenderableMedia(media) {
+  if (!media) return false;
+  if (typeof media.readyState === "number") return media.readyState >= 2;
+  return Boolean(media.complete && media.naturalWidth > 0);
+}
+
+function getSpeedEffectMultiplier() {
+  return (player.speedTimer > 0 ? 2 : 1) * (player.slowTimer > 0 ? 0.5 : 1);
 }
 
 function rectsOverlap(a, b, padding = 0) {
@@ -233,7 +250,7 @@ function updateTemporaryEffects(delta) {
 function drawTemporaryEffects() {
   for (const effect of temporaryEffects) {
     const video = bonusFxVideos[effect.type];
-    if (!video || video.readyState < 2) continue;
+    if (!isRenderableMedia(video)) continue;
     drawVideoWithTransparentBlue(
       video,
       effect.x,
@@ -246,7 +263,7 @@ function drawTemporaryEffects() {
 }
 
 function drawVideoWithTransparentBlue(video, x, y, width, height, alpha = 1) {
-  if (!fxKeyContext || !video || video.readyState < 2) return;
+  if (!fxKeyContext || !isRenderableMedia(video)) return;
 
   fxKeyCanvas.width = width;
   fxKeyCanvas.height = height;
@@ -261,7 +278,7 @@ function drawVideoWithTransparentBlue(video, x, y, width, height, alpha = 1) {
     const green = data[i + 1];
     const blue = data[i + 2];
 
-    if (blue > 135 && blue > red + 28 && blue > green + 18) {
+    if (blue > 95 && blue > red + 16 && blue > green + 8) {
       data[i + 3] = 0;
       continue;
     }
@@ -293,12 +310,12 @@ const platformSprites = {
 };
 
 const bonusFxVideos = {
-  accelerated: createVideoAsset("./Custom/Visuels/FX-ACCELERATED.mp4"),
-  invincible: createVideoAsset("./Custom/Visuels/FX-INVINCIBLE.mp4"),
-  jetpack: createVideoAsset("./Custom/Visuels/FX-JET_PACK.mp4"),
-  slow: createVideoAsset("./Custom/Visuels/FX-RALENTI.mp4"),
-  trampolineLoop: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.mp4"),
-  trampolineBound: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.mp4"),
+  accelerated: createImageAsset("./Custom/Visuels/FX-ACCELERATED.gif"),
+  invincible: createImageAsset("./Custom/Visuels/FX-INVINCIBLE.gif"),
+  jetpack: createImageAsset("./Custom/Visuels/FX-JET_PACK.gif"),
+  slow: createImageAsset("./Custom/Visuels/FX-RALENTI.gif"),
+  trampolineLoop: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.gif"),
+  trampolineBound: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.gif"),
 };
 
 const fxKeyCanvas = document.createElement("canvas");
@@ -827,6 +844,8 @@ function activateBonus(type) {
   switch (type) {
     case "jetpack":
       player.jetpackTimer = 5;
+      player.speedTimer = 0;
+      player.slowTimer = 0;
       messageText = "Fusée !";
       break;
     case "trampoline":
@@ -839,10 +858,12 @@ function activateBonus(type) {
       break;
     case "slow":
       player.slowTimer = 5;
+      player.speedTimer = 0;
       messageText = "Ralentissement";
       break;
     case "accelerated":
       player.speedTimer = 5;
+      player.slowTimer = 0;
       messageText = "Accélération !";
       break;
     default:
@@ -867,7 +888,7 @@ function update(delta) {
   messageTimer = Math.max(0, messageTimer - delta);
   updateTemporaryEffects(delta);
 
-  const moveSpeed = 240 * (player.speedTimer > 0 ? 2 : 1) * (player.slowTimer > 0 ? 0.5 : 1);
+  const moveSpeed = 240 * getSpeedEffectMultiplier();
   const gravity = 1200 + (player.jetpackTimer > 0 ? -140 : 0) + (player.slowTimer > 0 ? 120 : 0);
   const jumpStrength = 560;
 
@@ -886,7 +907,7 @@ function update(delta) {
   const prevY = player.y;
   player.vy += gravity * delta;
   if (player.jetpackTimer > 0) {
-    player.vy -= 680 * delta;
+    player.vy -= 340 * delta;
   }
   player.y += player.vy * delta;
 
@@ -937,7 +958,7 @@ function update(delta) {
       player.y = platformTop - player.height;
       let bounceMultiplier = 1;
       if (player.jetpackTimer > 0) {
-        bounceMultiplier = 3;
+        bounceMultiplier = 1.5;
       } else if (player.trampolineTimer > 0) {
         bounceMultiplier = 1.4;
         player.trampolineTimer = 0;
@@ -1000,6 +1021,7 @@ function update(delta) {
       }
 
       const fromTop = prevY + player.height <= enemyTop + 4;
+      const fromBottom = prevY >= enemyBottom - 4 && player.vy < 0;
       if (fromTop && player.vy >= 0) {
         enemy.dead = true;
         spawnBurst(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, "#fff5a8", 16, 170);
@@ -1007,6 +1029,8 @@ function update(delta) {
         playAnimationSound();
         playJumpSound();
         player.vy = -jumpStrength * 0.85;
+      } else if (fromBottom) {
+        // Ignore collisions from below to avoid unfair instant deaths.
       } else if (player.invincibleTimer <= 0) {
         gameOver = true;
         updatePauseQuickAudioVisibility();
@@ -1081,6 +1105,9 @@ function drawPlatforms() {
 
     ctx.save();
     ctx.globalAlpha = platform.broken ? Math.max(0, platform.breakTimer / 0.22) : 1;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.filter = "blur(0.2px)";
     const sprite = getPlatformSprite(platform);
     if (sprite && sprite.complete) {
       ctx.drawImage(sprite, platform.x, screenY, platform.width, platform.height);
@@ -1093,12 +1120,13 @@ function drawPlatforms() {
       ctx.fillStyle = "rgba(255,255,255,0.28)";
       ctx.fillRect(platform.x, screenY, platform.width, 4);
     }
+    ctx.filter = "none";
     ctx.restore();
 
     if (platform.bonusType && !platform.bonusCollected) {
       ctx.save();
       const bonusVideo = getBonusVideo(platform.bonusType);
-      if (bonusVideo && bonusVideo.readyState >= 2) {
+      if (isRenderableMedia(bonusVideo)) {
         drawVideoWithTransparentBlue(bonusVideo, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
       }
       ctx.restore();
@@ -1346,7 +1374,7 @@ if (swipeArea) {
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
     const dx = (e.clientX - dragStartX) * scale;
-    player.x = playerStartX + dx;
+    player.x = playerStartX + dx * getSpeedEffectMultiplier();
     if (dx < -8) lastDirection = -1;
     else if (dx > 8) lastDirection = 1;
   });
