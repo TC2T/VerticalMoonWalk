@@ -178,10 +178,6 @@ function preloadAmbientSound() {
 
 function primeFxVideos() {
   if (fxMediaPrimed) return;
-  if (performanceMode === "lite") {
-    fxMediaPrimed = true;
-    return;
-  }
   Object.values(bonusFxVideos).forEach((media) => {
     if (!media) return;
     if (typeof media.play === "function") {
@@ -261,7 +257,6 @@ function updateTemporaryEffects(delta) {
 }
 
 function drawTemporaryEffects() {
-  if (performanceMode === "lite") return;
   for (const effect of temporaryEffects) {
     const media = bonusFxVideos[effect.type];
     if (!isRenderableMedia(media)) continue;
@@ -1102,7 +1097,7 @@ function drawBackground() {
   gradient.addColorStop(0.5, "rgba(8, 10, 18, 0.45)");
   gradient.addColorStop(1, "rgba(3, 4, 10, 0.8)");
 
-  if (performanceMode === "full" && backgroundVideo && backgroundVideo.readyState >= 2) {
+  if (backgroundVideo && backgroundVideo.readyState >= 2) {
     ctx.save();
     ctx.drawImage(backgroundVideo, 0, 0, canvas.width, canvas.height);
     ctx.globalCompositeOperation = "source-over";
@@ -1153,13 +1148,11 @@ function drawPlatforms() {
 
     if (platform.bonusType && !platform.bonusCollected) {
       ctx.save();
-      if (performanceMode === "lite") {
-        drawBonusFallback(platform.bonusType, platform.x + platform.width / 2, screenY - 22);
+      const bonusMedia = getBonusVideo(platform.bonusType);
+      if (isRenderableMedia(bonusMedia)) {
+        drawRenderableMedia(bonusMedia, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
       } else {
-        const bonusMedia = getBonusVideo(platform.bonusType);
-        if (isRenderableMedia(bonusMedia)) {
-          drawRenderableMedia(bonusMedia, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
-        }
+        drawBonusFallback(platform.bonusType, platform.x + platform.width / 2, screenY - 22);
       }
       ctx.restore();
     }
@@ -1424,11 +1417,7 @@ if (swipeArea) {
 }
 
 resizeCanvas();
-if (performanceMode === "full") {
-  backgroundVideo?.play().catch(() => {});
-} else if (backgroundVideo) {
-  backgroundVideo.pause();
-}
+backgroundVideo?.play().catch(() => {});
 resetGame(true);
 updateSoundUI();
 requestAnimationFrame(loop);
