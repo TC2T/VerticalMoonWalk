@@ -17,8 +17,6 @@ const ambianceSelect = document.getElementById("ambianceSelect");
 const pauseAmbianceSelect = document.getElementById("pauseAmbianceSelect");
 const backgroundVideo = document.getElementById("gameBackground");
 const swipeArea = document.getElementById("swipeArea");
-const webmProbe = document.createElement("video");
-const supportsWebmVideo = Boolean(webmProbe.canPlayType && webmProbe.canPlayType("video/webm"));
 const isMobileDevice =
   window.matchMedia("(pointer: coarse)").matches ||
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
@@ -180,18 +178,8 @@ function preloadAmbientSound() {
 
 function primeFxVideos() {
   if (fxMediaPrimed) return;
-  if (!supportsWebmVideo) {
-    fxMediaPrimed = true;
-    return;
-  }
   Object.values(bonusFxVideos).forEach((media) => {
     if (!media) return;
-    if (typeof media.play === "function") {
-      if (media.paused || media.ended) {
-        media.play().catch(() => {});
-      }
-      return;
-    }
     if (typeof media.decode === "function") {
       media.decode().catch(() => {});
     }
@@ -201,7 +189,6 @@ function primeFxVideos() {
 
 function isRenderableMedia(media) {
   if (!media) return false;
-  if (typeof media.readyState === "number") return media.readyState >= 2;
   return Boolean(media.complete && media.naturalWidth > 0);
 }
 
@@ -344,12 +331,12 @@ const platformSprites = {
 };
 
 const bonusFxVideos = {
-  accelerated: createVideoAsset("./Custom/Visuels/FX-ACCELERATED.webm"),
-  invincible: createVideoAsset("./Custom/Visuels/FX-INVINCIBLE.webm"),
-  jetpack: createVideoAsset("./Custom/Visuels/FX-JET_PACK.webm"),
-  slow: createVideoAsset("./Custom/Visuels/FX-RALENTI.webm"),
-  trampolineLoop: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.webm"),
-  trampolineBound: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.webm"),
+  accelerated: createImageAsset("./Custom/Visuels/FX-ACCELERATED.gif"),
+  invincible: createImageAsset("./Custom/Visuels/FX-INVINCIBLE.gif"),
+  jetpack: createImageAsset("./Custom/Visuels/FX-JET_PACK.gif"),
+  slow: createImageAsset("./Custom/Visuels/FX-RALENTI.gif"),
+  trampolineLoop: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.gif"),
+  trampolineBound: createImageAsset("./Custom/Visuels/FX-TRAMPOLINE-BOUND.gif"),
 };
 
 function setControlState(control, isPressed) {
