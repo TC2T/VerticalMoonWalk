@@ -41,6 +41,9 @@ let playerSpriteJumpMirror = null;
 const SAFE_PLATFORM_COUNT = 10;
 const TRAPPED_PLATFORM_CHANCE = 1 / 15;
 const TRAMPOLINE_BOUND_EFFECT_DURATION = 0.42;
+const FX_BLACK_KEY_THRESHOLD = 58;
+const FX_BLACK_KEY_FEATHER = 46;
+const FX_BLACK_NEUTRAL_CHROMA_LIMIT = 34;
 const soundSettings = {
   effects: true,
   music: true,
@@ -154,6 +157,8 @@ let animationSoundPool = [];
 let jumpSoundPool = [];
 let gameOverSoundPool = [];
 const temporaryEffects = [];
+let fxKeyCanvas = null;
+let fxKeyContext = null;
 let backgroundGradient = null;
 let backgroundGradientHeight = 0;
 
@@ -277,12 +282,79 @@ function drawTemporaryEffects() {
 function drawRenderableMedia(media, x, y, width, height, alpha = 1) {
   if (!isRenderableMedia(media)) return;
   const clampedAlpha = Math.max(0, Math.min(1, alpha));
-  if (typeof media.readyState === "number" && (media.paused || media.ended)) {
-    media.play().catch(() => {});
+  if (typeof media.readyState === "number") {
+    if (media.paused || media.ended) {
+      media.play().catch(() => {});
+    }
+    drawVideoWithBlackKey(media, x, y, width, height, clampedAlpha);
+    return;
   }
   ctx.save();
   ctx.globalAlpha = clampedAlpha;
   ctx.drawImage(media, x, y, width, height);
+  ctx.restore();
+}
+
+function ensureFxKeyBuffer(width, height) {
+  const safeWidth = Math.max(1, Math.round(width));
+  const safeHeight = Math.max(1, Math.round(height));
+  if (!fxKeyCanvas) {
+    fxKeyCanvas = document.createElement("canvas");
+    fxKeyContext = fxKeyCanvas.getContext("2d", { willReadFrequently: true });
+  }
+  if (!fxKeyContext) return null;
+  if (fxKeyCanvas.width !== safeWidth || fxKeyCanvas.height !== safeHeight) {
+    fxKeyCanvas.width = safeWidth;
+    fxKeyCanvas.height = safeHeight;
+  }
+  return fxKeyContext;
+}
+
+function drawVideoWithBlackKey(media, x, y, width, height, alpha = 1) {
+  const bufferContext = ensureFxKeyBuffer(width, height);
+  if (!bufferContext || !fxKeyCanvas) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(media, x, y, width, height);
+    ctx.restore();
+    return;
+  }
+
+  const safeWidth = fxKeyCanvas.width;
+  const safeHeight = fxKeyCanvas.height;
+  bufferContext.clearRect(0, 0, safeWidth, safeHeight);
+  bufferContext.drawImage(media, 0, 0, safeWidth, safeHeight);
+
+  const frame = bufferContext.getImageData(0, 0, safeWidth, safeHeight);
+  const pixels = frame.data;
+  const hardCut = FX_BLACK_KEY_THRESHOLD;
+  const softRange = FX_BLACK_KEY_FEATHER;
+  const softLimit = hardCut + softRange;
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const b = pixels[i + 2];
+    const maxChannel = Math.max(r, g, b);
+    const minChannel = Math.min(r, g, b);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const chroma = maxChannel - minChannel;
+    const isNearNeutralDark = chroma <= FX_BLACK_NEUTRAL_CHROMA_LIMIT && luma <= softLimit;
+
+    if (luma <= hardCut || (isNearNeutralDark && luma <= hardCut + softRange * 0.85)) {
+      pixels[i + 3] = 0;
+      continue;
+    }
+    if (luma < softLimit) {
+      const ratio = (luma - hardCut) / softRange;
+      pixels[i + 3] = Math.round(pixels[i + 3] * ratio);
+    }
+  }
+
+  bufferContext.putImageData(frame, 0, 0);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(fxKeyCanvas, x, y, width, height);
   ctx.restore();
 }
 
@@ -1030,10 +1102,9 @@ function update(delta) {
 
       const prevPlayerTop = prevY;
       const prevPlayerBottom = prevY + player.height;
-      if (player.vy < 0) {
-        // Never kill the player while moving upward into an enemy.
-        player.y = Math.max(player.y, enemyBottom + 1);
-        player.vy = Math.max(0, player.vy);
+      const movingUpward = player.vy < 0 || player.y < prevY;
+      const cameFromBelow = prevPlayerTop >= enemyBottom - 3;
+      if (movingUpward || cameFromBelow) {
         continue;
       }
 
