@@ -44,6 +44,11 @@ const TRAMPOLINE_BOUND_EFFECT_DURATION = 0.42;
 const FX_BLACK_KEY_THRESHOLD = 58;
 const FX_BLACK_KEY_FEATHER = 46;
 const FX_BLACK_NEUTRAL_CHROMA_LIMIT = 34;
+const ACCELERATED_SPEED_MULTIPLIER = 1.8;
+const SLOW_SPEED_MULTIPLIER = 0.28;
+const SLOW_GRAVITY_PENALTY = 260;
+const SLOW_JUMP_MULTIPLIER = 0.72;
+const FX_KEY_TARGET_FPS = 24;
 const soundSettings = {
   effects: true,
   music: true,
@@ -138,8 +143,8 @@ const player = {
   invincibleTimer: 0,
   slowTimer: 0,
   speedTimer: 0,
-  jetpackTimer: 0,
-  trampolineTimer: 0,
+  jetpackCharges: 0,
+  trampolineCharges: 0,
 };
 
 const platforms = [];
@@ -157,8 +162,7 @@ let animationSoundPool = [];
 let jumpSoundPool = [];
 let gameOverSoundPool = [];
 const temporaryEffects = [];
-let fxKeyCanvas = null;
-let fxKeyContext = null;
+const fxVideoFrameCache = new WeakMap();
 let backgroundGradient = null;
 let backgroundGradientHeight = 0;
 
@@ -201,7 +205,7 @@ function isRenderableMedia(media) {
 }
 
 function getSpeedEffectMultiplier() {
-  return (player.speedTimer > 0 ? 2 : 1) * (player.slowTimer > 0 ? 0.5 : 1);
+  return (player.speedTimer > 0 ? ACCELERATED_SPEED_MULTIPLIER : 1) * (player.slowTimer > 0 ? SLOW_SPEED_MULTIPLIER : 1);
 }
 
 function rectsOverlap(a, b, padding = 0) {
@@ -295,24 +299,44 @@ function drawRenderableMedia(media, x, y, width, height, alpha = 1) {
   ctx.restore();
 }
 
-function ensureFxKeyBuffer(width, height) {
-  const safeWidth = Math.max(1, Math.round(width));
-  const safeHeight = Math.max(1, Math.round(height));
-  if (!fxKeyCanvas) {
-    fxKeyCanvas = document.createElement("canvas");
-    fxKeyContext = fxKeyCanvas.getContext("2d", { willReadFrequently: true });
+function getFxFrameEntry(media, width, height) {
+  let mediaCache = fxVideoFrameCache.get(media);
+  if (!mediaCache) {
+    mediaCache = new Map();
+    fxVideoFrameCache.set(media, mediaCache);
   }
-  if (!fxKeyContext) return null;
-  if (fxKeyCanvas.width !== safeWidth || fxKeyCanvas.height !== safeHeight) {
-    fxKeyCanvas.width = safeWidth;
-    fxKeyCanvas.height = safeHeight;
+
+  const key = `${width}x${height}`;
+  let entry = mediaCache.get(key);
+  if (!entry) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    entry = {
+      canvas,
+      context,
+      lastSourceBucket: -1,
+      lastProcessTime: -Infinity,
+    };
+    mediaCache.set(key, entry);
+    return entry;
   }
-  return fxKeyContext;
+
+  if (entry.canvas.width !== width || entry.canvas.height !== height) {
+    entry.canvas.width = width;
+    entry.canvas.height = height;
+    entry.lastSourceBucket = -1;
+    entry.lastProcessTime = -Infinity;
+  }
+  return entry;
 }
 
 function drawVideoWithBlackKey(media, x, y, width, height, alpha = 1) {
-  const bufferContext = ensureFxKeyBuffer(width, height);
-  if (!bufferContext || !fxKeyCanvas) {
+  const safeWidth = Math.max(1, Math.round(width));
+  const safeHeight = Math.max(1, Math.round(height));
+  const frameEntry = getFxFrameEntry(media, safeWidth, safeHeight);
+  if (!frameEntry || !frameEntry.context) {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.drawImage(media, x, y, width, height);
@@ -320,41 +344,52 @@ function drawVideoWithBlackKey(media, x, y, width, height, alpha = 1) {
     return;
   }
 
-  const safeWidth = fxKeyCanvas.width;
-  const safeHeight = fxKeyCanvas.height;
-  bufferContext.clearRect(0, 0, safeWidth, safeHeight);
-  bufferContext.drawImage(media, 0, 0, safeWidth, safeHeight);
+  const sourceBucket = Math.floor((media.currentTime || 0) * FX_KEY_TARGET_FPS);
+  const now = performance.now();
+  const minimumProcessInterval = 1000 / FX_KEY_TARGET_FPS;
+  const canReuseFrame =
+    frameEntry.lastSourceBucket === sourceBucket ||
+    now - frameEntry.lastProcessTime < minimumProcessInterval;
 
-  const frame = bufferContext.getImageData(0, 0, safeWidth, safeHeight);
-  const pixels = frame.data;
-  const hardCut = FX_BLACK_KEY_THRESHOLD;
-  const softRange = FX_BLACK_KEY_FEATHER;
-  const softLimit = hardCut + softRange;
+  if (!canReuseFrame) {
+    const bufferContext = frameEntry.context;
+    bufferContext.clearRect(0, 0, safeWidth, safeHeight);
+    bufferContext.drawImage(media, 0, 0, safeWidth, safeHeight);
 
-  for (let i = 0; i < pixels.length; i += 4) {
-    const r = pixels[i];
-    const g = pixels[i + 1];
-    const b = pixels[i + 2];
-    const maxChannel = Math.max(r, g, b);
-    const minChannel = Math.min(r, g, b);
-    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const chroma = maxChannel - minChannel;
-    const isNearNeutralDark = chroma <= FX_BLACK_NEUTRAL_CHROMA_LIMIT && luma <= softLimit;
+    const frame = bufferContext.getImageData(0, 0, safeWidth, safeHeight);
+    const pixels = frame.data;
+    const hardCut = FX_BLACK_KEY_THRESHOLD;
+    const softRange = FX_BLACK_KEY_FEATHER;
+    const softLimit = hardCut + softRange;
 
-    if (luma <= hardCut || (isNearNeutralDark && luma <= hardCut + softRange * 0.85)) {
-      pixels[i + 3] = 0;
-      continue;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const maxChannel = Math.max(r, g, b);
+      const minChannel = Math.min(r, g, b);
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const chroma = maxChannel - minChannel;
+      const isNearNeutralDark = chroma <= FX_BLACK_NEUTRAL_CHROMA_LIMIT && luma <= softLimit;
+
+      if (luma <= hardCut || (isNearNeutralDark && luma <= hardCut + softRange * 0.85)) {
+        pixels[i + 3] = 0;
+        continue;
+      }
+      if (luma < softLimit) {
+        const ratio = (luma - hardCut) / softRange;
+        pixels[i + 3] = Math.round(pixels[i + 3] * ratio);
+      }
     }
-    if (luma < softLimit) {
-      const ratio = (luma - hardCut) / softRange;
-      pixels[i + 3] = Math.round(pixels[i + 3] * ratio);
-    }
+
+    bufferContext.putImageData(frame, 0, 0);
+    frameEntry.lastSourceBucket = sourceBucket;
+    frameEntry.lastProcessTime = now;
   }
 
-  bufferContext.putImageData(frame, 0, 0);
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.drawImage(fxKeyCanvas, x, y, width, height);
+  ctx.drawImage(frameEntry.canvas, x, y, width, height);
   ctx.restore();
 }
 
@@ -777,8 +812,8 @@ function resetGame(startPaused = false) {
   player.invincibleTimer = 0;
   player.slowTimer = 0;
   player.speedTimer = 0;
-  player.jetpackTimer = 0;
-  player.trampolineTimer = 0;
+  player.jetpackCharges = 0;
+  player.trampolineCharges = 0;
   platforms.length = 0;
   enemies.length = 0;
   messageText = "";
@@ -923,13 +958,15 @@ function ensurePlatforms() {
 function activateBonus(type) {
   switch (type) {
     case "jetpack":
-      player.jetpackTimer = 5;
+      player.jetpackCharges = 1;
+      player.trampolineCharges = 0;
       player.speedTimer = 0;
       player.slowTimer = 0;
       messageText = "Fusée !";
       break;
     case "trampoline":
-      player.trampolineTimer = 0.7;
+      player.trampolineCharges = 1;
+      player.jetpackCharges = 0;
       messageText = "Trampoline !";
       break;
     case "invincible":
@@ -964,14 +1001,12 @@ function update(delta) {
   player.invincibleTimer = Math.max(0, player.invincibleTimer - delta);
   player.slowTimer = Math.max(0, player.slowTimer - delta);
   player.speedTimer = Math.max(0, player.speedTimer - delta);
-  player.jetpackTimer = Math.max(0, player.jetpackTimer - delta);
-  player.trampolineTimer = Math.max(0, player.trampolineTimer - delta);
   messageTimer = Math.max(0, messageTimer - delta);
   updateTemporaryEffects(delta);
 
   const moveSpeed = 240 * getSpeedEffectMultiplier();
-  const gravity = 1200 + (player.jetpackTimer > 0 ? -140 : 0) + (player.slowTimer > 0 ? 120 : 0);
-  const jumpStrength = 560;
+  const gravity = 1200 + (player.slowTimer > 0 ? SLOW_GRAVITY_PENALTY : 0);
+  const jumpStrength = 560 * (player.slowTimer > 0 ? SLOW_JUMP_MULTIPLIER : 1);
 
   player.vx = 0;
   if (keys.left) player.vx -= moveSpeed;
@@ -987,9 +1022,6 @@ function update(delta) {
 
   const prevY = player.y;
   player.vy += gravity * delta;
-  if (player.jetpackTimer > 0) {
-    player.vy -= 340 * delta;
-  }
   player.y += player.vy * delta;
 
   // Update facing direction from velocity when not dragging
@@ -1037,11 +1069,20 @@ function update(delta) {
 
       player.y = platformTop - player.height;
       let bounceMultiplier = 1;
-      if (player.jetpackTimer > 0) {
-        bounceMultiplier = 1.5;
-      } else if (player.trampolineTimer > 0) {
+      if (player.jetpackCharges > 0) {
+        bounceMultiplier = 1.7;
+        player.jetpackCharges = 0;
+        spawnTemporaryEffect(
+          "jetpack",
+          player.x + player.width / 2 - 34,
+          player.y + player.height - 42,
+          68,
+          68,
+          TRAMPOLINE_BOUND_EFFECT_DURATION
+        );
+      } else if (player.trampolineCharges > 0) {
         bounceMultiplier = 1.4;
-        player.trampolineTimer = 0;
+        player.trampolineCharges = 0;
         spawnTemporaryEffect(
           "trampolineLoop",
           player.x + player.width / 2 - 34,
