@@ -106,16 +106,6 @@ canvas {
   background: linear-gradient(180deg, rgba(28, 33, 64, 0.9) 0%, rgba(8, 10, 19, 0.92) 100%);
 }
 
-.mobile-controls {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  transform: translateX(-50%);
-  display: none;
-  gap: 12px;
-  pointer-events: none;
-}
-
 .in-game-buttons {
   position: absolute;
   top: 14px;
@@ -271,23 +261,6 @@ canvas {
   background: transparent;
 }
 
-.control-btn {
-  width: 54px;
-  height: 54px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(7, 8, 20, 0.78);
-  color: #ffffff;
-  font-size: 1.2rem;
-  box-shadow: 0 0 16px rgba(114, 241, 255, 0.18);
-  pointer-events: auto;
-}
-
-.control-btn.active {
-  background: rgba(255, 126, 186, 0.95);
-  transform: scale(0.96);
-}
-
 @media (max-width: 768px) {
   body {
     padding: 0;
@@ -334,7 +307,4 @@ canvas {
     top: 60%;
   }
 
-  .mobile-controls {
-    display: flex;
-  }
 }

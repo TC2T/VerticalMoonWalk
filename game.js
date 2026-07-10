@@ -17,10 +17,6 @@ const ambianceSelect = document.getElementById("ambianceSelect");
 const pauseAmbianceSelect = document.getElementById("pauseAmbianceSelect");
 const backgroundVideo = document.getElementById("gameBackground");
 const swipeArea = document.getElementById("swipeArea");
-const isMobileDevice =
-  window.matchMedia("(pointer: coarse)").matches ||
-  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
-const performanceMode = isMobileDevice ? "lite" : "full";
 
 let isDragging = false;
 let dragStartX = 0;
@@ -30,6 +26,7 @@ const keys = { left: false, right: false };
 let gameOver = false;
 let paused = false;
 let lastTime = 0;
+let worldTime = 0;
 let cameraY = 0;
 let nextPlatformY = canvas.height - 120;
 let currentHeight = 0;
@@ -44,11 +41,6 @@ let playerSpriteJumpMirror = null;
 const SAFE_PLATFORM_COUNT = 10;
 const TRAPPED_PLATFORM_CHANCE = 1 / 15;
 const TRAMPOLINE_BOUND_EFFECT_DURATION = 0.42;
-const FX_BLACK_KEY_THRESHOLD = 28;
-const FX_BLACK_KEY_FEATHER = 26;
-const FX_BLACK_KEY_THRESHOLD_MOBILE = 58;
-const FX_BLACK_KEY_FEATHER_MOBILE = 46;
-const FX_BLACK_NEUTRAL_CHROMA_LIMIT = 34;
 const soundSettings = {
   effects: true,
   music: true,
@@ -161,10 +153,9 @@ let currentAmbiance = "";
 let animationSoundPool = [];
 let jumpSoundPool = [];
 let gameOverSoundPool = [];
-let fxMediaPrimed = false;
 const temporaryEffects = [];
-let fxKeyCanvas = null;
-let fxKeyContext = null;
+let backgroundGradient = null;
+let backgroundGradientHeight = 0;
 
 function preloadAmbientSound() {
   const selectedTrack = ambientTracks[soundSettings.ambiance] || ambientTracks.thriller;
@@ -184,7 +175,6 @@ function preloadAmbientSound() {
 }
 
 function primeFxVideos() {
-  if (fxMediaPrimed) return;
   Object.values(bonusFxVideos).forEach((media) => {
     if (!media) return;
     if (typeof media.play === "function") {
@@ -197,7 +187,6 @@ function primeFxVideos() {
       media.decode().catch(() => {});
     }
   });
-  fxMediaPrimed = true;
 }
 
 function isRenderableMedia(media) {
@@ -278,6 +267,7 @@ function drawTemporaryEffects() {
       continue;
     }
 
+    if (media) continue;
     const centerX = effect.x + effect.width / 2;
     const centerY = effect.y + effect.height / 2;
     drawBonusFallback(effect.type || "trampoline", centerX, centerY);
@@ -287,76 +277,12 @@ function drawTemporaryEffects() {
 function drawRenderableMedia(media, x, y, width, height, alpha = 1) {
   if (!isRenderableMedia(media)) return;
   const clampedAlpha = Math.max(0, Math.min(1, alpha));
-  if (typeof media.readyState === "number") {
-    drawVideoWithBlackKey(media, x, y, width, height, clampedAlpha);
-    return;
+  if (typeof media.readyState === "number" && (media.paused || media.ended)) {
+    media.play().catch(() => {});
   }
   ctx.save();
   ctx.globalAlpha = clampedAlpha;
   ctx.drawImage(media, x, y, width, height);
-  ctx.restore();
-}
-
-function ensureFxKeyBuffer(width, height) {
-  const safeWidth = Math.max(1, Math.round(width));
-  const safeHeight = Math.max(1, Math.round(height));
-  if (!fxKeyCanvas) {
-    fxKeyCanvas = document.createElement("canvas");
-    fxKeyContext = fxKeyCanvas.getContext("2d", { willReadFrequently: true });
-  }
-  if (!fxKeyContext) return null;
-  if (fxKeyCanvas.width !== safeWidth || fxKeyCanvas.height !== safeHeight) {
-    fxKeyCanvas.width = safeWidth;
-    fxKeyCanvas.height = safeHeight;
-  }
-  return fxKeyContext;
-}
-
-function drawVideoWithBlackKey(media, x, y, width, height, alpha = 1) {
-  const bufferContext = ensureFxKeyBuffer(width, height);
-  if (!bufferContext || !fxKeyCanvas) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(media, x, y, width, height);
-    ctx.restore();
-    return;
-  }
-
-  const safeWidth = fxKeyCanvas.width;
-  const safeHeight = fxKeyCanvas.height;
-  bufferContext.clearRect(0, 0, safeWidth, safeHeight);
-  bufferContext.drawImage(media, 0, 0, safeWidth, safeHeight);
-
-  const frame = bufferContext.getImageData(0, 0, safeWidth, safeHeight);
-  const pixels = frame.data;
-  const hardCut = isMobileDevice ? FX_BLACK_KEY_THRESHOLD_MOBILE : FX_BLACK_KEY_THRESHOLD;
-  const softRange = isMobileDevice ? FX_BLACK_KEY_FEATHER_MOBILE : FX_BLACK_KEY_FEATHER;
-  const softLimit = hardCut + softRange;
-
-  for (let i = 0; i < pixels.length; i += 4) {
-    const r = pixels[i];
-    const g = pixels[i + 1];
-    const b = pixels[i + 2];
-    const maxChannel = Math.max(r, g, b);
-    const minChannel = Math.min(r, g, b);
-    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const chroma = maxChannel - minChannel;
-    const isNearNeutralDark = chroma <= FX_BLACK_NEUTRAL_CHROMA_LIMIT && luma <= softLimit;
-
-    if (luma <= hardCut || (isMobileDevice && isNearNeutralDark && luma <= hardCut + softRange * 0.85)) {
-      pixels[i + 3] = 0;
-      continue;
-    }
-    if (luma < softLimit) {
-      const ratio = (luma - hardCut) / softRange;
-      pixels[i + 3] = Math.round(pixels[i + 3] * ratio);
-    }
-  }
-
-  bufferContext.putImageData(frame, 0, 0);
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.drawImage(fxKeyCanvas, x, y, width, height);
   ctx.restore();
 }
 
@@ -419,40 +345,6 @@ const bonusFxVideos = {
   trampolineLoop: createVideoAsset("./Custom/Visuels/FX-TRAMPOLINE-LOOP.mp4"),
 };
 
-function setControlState(control, isPressed) {
-  if (control === "left") keys.left = isPressed;
-  if (control === "right") keys.right = isPressed;
-  if (isPressed) {
-    if (control === "left") lastDirection = -1;
-    if (control === "right") lastDirection = 1;
-  }
-}
-
-function bindMobileControls() {
-  controlButtons.forEach((button) => {
-    const control = button.dataset.control;
-    const press = (event) => {
-      event.preventDefault();
-      ensureAudio();
-      setControlState(control, true);
-      button.classList.add("active");
-    };
-    const release = (event) => {
-      if (event) event.preventDefault();
-      setControlState(control, false);
-      button.classList.remove("active");
-    };
-
-    button.addEventListener("pointerdown", press);
-    button.addEventListener("pointerup", release);
-    button.addEventListener("pointerleave", release);
-    button.addEventListener("pointercancel", release);
-    button.addEventListener("touchstart", press, { passive: false });
-    button.addEventListener("touchend", release);
-    button.addEventListener("touchcancel", release);
-  });
-}
-
 function resizeCanvas() {
   const baseWidth = 480;
   const baseHeight = 720;
@@ -504,7 +396,7 @@ function resizeCanvas() {
 }
 
 function spawnBurst(x, y, color, count = 10, speed = 140) {
-  const effectiveCount = performanceMode === "lite" ? Math.max(4, Math.floor(count * 0.55)) : count;
+  const effectiveCount = count;
   for (let i = 0; i < count; i += 1) {
     if (i >= effectiveCount) break;
     const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
@@ -803,6 +695,7 @@ function resetGame(startPaused = false) {
   particles.length = 0;
   temporaryEffects.length = 0;
   lastTime = 0;
+  worldTime = 0;
   cameraY = 0;
   nextPlatformY = canvas.height - 120;
   currentHeight = 0;
@@ -992,6 +885,7 @@ function update(delta) {
 
   if (paused) return;
 
+  worldTime += delta;
   elapsedTime += delta;
 
   screenFlash = Math.max(0, screenFlash - delta);
@@ -1041,7 +935,7 @@ function update(delta) {
     const platformBottom = platform.y + platform.height;
 
     if (platform.type === "moving") {
-      const oscillation = Math.sin(performance.now() / 450 + platform.offset) * platform.amplitude;
+      const oscillation = Math.sin(worldTime * (1000 / 450) + platform.offset) * platform.amplitude;
       platform.x = platform.baseX + oscillation;
     }
 
@@ -1134,9 +1028,16 @@ function update(delta) {
         enemy.collided = true;
       }
 
-      const fromTop = prevY + player.height <= enemyTop + 4;
-      const fromBottom = prevY >= enemyBottom - 4 && player.vy < 0;
-      if (fromTop && player.vy >= 0) {
+      const prevPlayerTop = prevY;
+      const currPlayerTop = player.y;
+      const prevPlayerBottom = prevY + player.height;
+      const movingUpward = currPlayerTop < prevPlayerTop;
+      const fromTop = prevPlayerBottom <= enemyTop + 4 && player.vy >= 0;
+      const fromBottom =
+        movingUpward &&
+        prevPlayerTop >= enemyBottom - 3 &&
+        currPlayerTop <= enemyBottom + 4;
+      if (fromTop) {
         enemy.dead = true;
         spawnBurst(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, "#fff5a8", 16, 170);
         screenFlash = Math.max(screenFlash, 0.12);
@@ -1144,7 +1045,9 @@ function update(delta) {
         playJumpSound();
         player.vy = -jumpStrength * 0.85;
       } else if (fromBottom) {
-        // Ignore collisions from below to avoid unfair instant deaths.
+        // Prevent death when the player clips the enemy from underneath.
+        player.y = enemyBottom + 1;
+        player.vy = Math.max(0, player.vy);
       } else if (player.invincibleTimer <= 0) {
         gameOver = true;
         updatePauseQuickAudioVisibility();
@@ -1182,27 +1085,30 @@ function update(delta) {
 }
 
 function drawBackground() {
-  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, "rgba(7, 8, 20, 0.15)");
-  gradient.addColorStop(0.5, "rgba(8, 10, 18, 0.45)");
-  gradient.addColorStop(1, "rgba(3, 4, 10, 0.8)");
+  if (!backgroundGradient || backgroundGradientHeight !== canvas.height) {
+    backgroundGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    backgroundGradient.addColorStop(0, "rgba(7, 8, 20, 0.15)");
+    backgroundGradient.addColorStop(0.5, "rgba(8, 10, 18, 0.45)");
+    backgroundGradient.addColorStop(1, "rgba(3, 4, 10, 0.8)");
+    backgroundGradientHeight = canvas.height;
+  }
 
   if (backgroundVideo && backgroundVideo.readyState >= 2) {
     ctx.save();
     ctx.drawImage(backgroundVideo, 0, 0, canvas.width, canvas.height);
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = gradient;
+    ctx.fillStyle = backgroundGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
   } else {
-    ctx.fillStyle = gradient;
+    ctx.fillStyle = backgroundGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
   ctx.save();
   ctx.globalAlpha = 0.12;
   ctx.fillStyle = "#ffffff";
-  const dotCount = performanceMode === "lite" ? 10 : 22;
+  const dotCount = 22;
   for (let i = 0; i < dotCount; i += 1) {
     const x = ((i * 59 + cameraY * 0.03) % (canvas.width + 40)) - 20;
     const y = ((i * 113 + cameraY * 0.01) % (canvas.height + 40)) - 20;
@@ -1226,7 +1132,7 @@ function drawPlatforms() {
     if (sprite && sprite.complete) {
       drawPlatformSpritePreserveAspect(sprite, platform.x, screenY, platform.width, platform.height);
     } else {
-      ctx.shadowBlur = performanceMode === "lite" ? 0 : 20;
+      ctx.shadowBlur = 20;
       ctx.shadowColor = platform.type === "moving" ? "#ffcf5c" : platform.type === "trapped" ? "#ff6f91" : "#6cf8ff";
       ctx.fillStyle = platform.type === "moving" ? "#ffcf5c" : platform.type === "trapped" ? "#ff6f91" : "#69e0ff";
       ctx.fillRect(platform.x, screenY, platform.width, platform.height);
@@ -1241,7 +1147,7 @@ function drawPlatforms() {
       const bonusMedia = getBonusVideo(platform.bonusType);
       if (isRenderableMedia(bonusMedia)) {
         drawRenderableMedia(bonusMedia, platform.x + platform.width / 2 - 20, screenY - 42, 40, 40);
-      } else {
+      } else if (!bonusMedia) {
         drawBonusFallback(platform.bonusType, platform.x + platform.width / 2, screenY - 22);
       }
       ctx.restore();
@@ -1258,7 +1164,7 @@ function drawEnemies() {
     const sprite = zombieSprites[family][enemy.direction < 0 ? "gauche" : "droite"];
     if (sprite && sprite.complete) {
       ctx.save();
-      ctx.shadowBlur = performanceMode === "lite" ? 8 : 16;
+      ctx.shadowBlur = 16;
       ctx.shadowColor = "#74ff7e";
       ctx.drawImage(sprite, enemy.x - 4, screenY - 4, enemy.width + 8, enemy.height + 8);
       ctx.restore();
@@ -1298,7 +1204,7 @@ function drawPlayer() {
     : (lastDirection < 0 ? playerSpriteContactMirror || playerSpriteContact : playerSpriteContact);
   if (sprite && sprite.complete) {
     ctx.save();
-    ctx.shadowBlur = performanceMode === "lite" ? 10 : 24;
+    ctx.shadowBlur = 24;
     ctx.shadowColor = player.invincibleTimer > 0 ? "#8af6ff" : "#ff4bd8";
     ctx.drawImage(sprite, player.x - 8, screenY - 8, player.width + 16, player.height + 16);
     ctx.restore();
