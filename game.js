@@ -1029,14 +1029,15 @@ function update(delta) {
       }
 
       const prevPlayerTop = prevY;
-      const currPlayerTop = player.y;
       const prevPlayerBottom = prevY + player.height;
-      const movingUpward = currPlayerTop < prevPlayerTop;
-      const fromTop = prevPlayerBottom <= enemyTop + 4 && player.vy >= 0;
-      const fromBottom =
-        movingUpward &&
-        prevPlayerTop >= enemyBottom - 3 &&
-        currPlayerTop <= enemyBottom + 4;
+      if (player.vy < 0) {
+        // Never kill the player while moving upward into an enemy.
+        player.y = Math.max(player.y, enemyBottom + 1);
+        player.vy = Math.max(0, player.vy);
+        continue;
+      }
+
+      const fromTop = prevPlayerBottom <= enemyTop + 4;
       if (fromTop) {
         enemy.dead = true;
         spawnBurst(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, "#fff5a8", 16, 170);
@@ -1044,10 +1045,6 @@ function update(delta) {
         playAnimationSound();
         playJumpSound();
         player.vy = -jumpStrength * 0.85;
-      } else if (fromBottom) {
-        // Prevent death when the player clips the enemy from underneath.
-        player.y = enemyBottom + 1;
-        player.vy = Math.max(0, player.vy);
       } else if (player.invincibleTimer <= 0) {
         gameOver = true;
         updatePauseQuickAudioVisibility();
